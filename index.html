@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#12382d">
+  <meta name="description" content="O novo site do Hotel Fazenda Curió está em construção. Em breve, um novo espaço para conhecer o hotel.">
+  <title>Hotel Fazenda Curió | Em construção</title>
+  <style>
+    * { box-sizing: border-box; }
+    html { min-height: 100%; background: #12382d; }
+    body { margin: 0; min-height: 100svh; color: #fff9eb; font-family: Arial, Helvetica, sans-serif; background: radial-gradient(ellipse at 100% 0%, #2c5944 0, transparent 60%), #12382d; }
+    .page { min-height: 100svh; max-width: 1440px; margin: auto; padding: 30px 24px; display: flex; flex-direction: column; }
+    header { display: flex; align-items: center; gap: 13px; }
+    .seal { width: 43px; height: 43px; border: 1px solid #c9b884; border-radius: 50%; display: grid; place-items: center; color: #dfce9e; font-family: Georgia, serif; font-size: 27px; }
+    .brand { font-size: 14px; line-height: 1.6; letter-spacing: .08em; }
+    .brand strong { display: block; font-family: Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: 400; line-height: 1; }
+    main { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; padding: 72px 0; }
+    .status { display: inline-flex; align-items: center; gap: 10px; border: 1px solid #79917e; border-radius: 30px; padding: 10px 16px; font-size: 14px; color: #eee4c9; }
+    .status::before { content: ''; width: 7px; height: 7px; background: #dcc38c; border-radius: 50%; }
+    h1 { font-family: Georgia, 'Times New Roman', serif; font-size: clamp(3rem, 9vw, 7rem); font-weight: 400; line-height: 1.06; letter-spacing: -.045em; margin: 28px 0 24px; max-width: 1000px; }
+    h1 span { display: block; color: #dfc993; font-style: italic; }
+    .description { max-width: 450px; color: #dde5da; font-size: 18px; line-height: 1.7; margin: 0; }
+    .soon { margin: 36px 0 0; font-size: 14px; letter-spacing: .14em; text-transform: uppercase; color: #dfc993; }
+    footer { border-top: 1px solid #55705d; padding-top: 20px; font-size: 14px; line-height: 1.6; color: #c4d0c2; }
+    @media (min-width: 768px) { .page { padding: 44px 7%; } main { padding: 90px 0; } }
+    @media (max-width: 360px) { .page { padding-inline: 20px; } h1 { font-size: 2.7rem; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header aria-label="Hotel Fazenda Curió">
+      <span class="seal" aria-hidden="true">C</span>
+      <div class="brand">HOTEL FAZENDA<strong>Curió</strong></div>
+    </header>
+    <main>
+      <div class="status">Site em construção</div>
+      <h1>Um novo espaço.<span>O mesmo Curió.</span></h1>
+      <p class="description">Estamos preparando nosso novo site para receber você. Em breve, conheça mais sobre o Hotel Fazenda Curió por aqui.</p>
+      <p class="soon">Até breve.</p>
+    </main>
+    <footer>Hotel Fazenda Curió</footer>
+  </div>
+</body>
+</html>
