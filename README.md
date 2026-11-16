@@ -69,3 +69,7 @@ Dentro da Principal, a aba Aniversariantes do mês filtra hóspedes elegíveis p
 ## Paginação dos contatos
 
 As listas exibem até 10 clientes por página, incluindo Principal e Aniversariantes do mês. O intervalo mostrado e o total são retornados pelo servidor. A busca e a troca de filtro reiniciam na primeira página; se a última página encolher após um envio, o servidor ajusta a página automaticamente.
+
+## Distribuição da base por cidade
+
+O painel administrativo apresenta a quantidade e o percentual por cidade/UF de todos os contatos cadastrados, sem depender do período de acessos. A agregação normaliza maiúsculas, acentos, espaços e nomes/siglas de UF. Cidades homônimas de estados diferentes permanecem separadas. Cadastros sem cidade são agrupados em Não informada. O endpoint exige administrador e retorna somente dados agregados.

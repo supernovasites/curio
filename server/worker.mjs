@@ -19,6 +19,14 @@ function fail(status, message) { throw Object.assign(new Error(message), {status
 const json = (v, status=200, extra={}) => new Response(JSON.stringify(v), {status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...extra}});
 const clean = (s,max=200) => typeof s === 'string' ? s.trim().slice(0,max) : '';
 const dateOnly = value => {const day=clean(value,40).slice(0,10);return /^\d{4}-\d{2}-\d{2}$/.test(day)&&!Number.isNaN(Date.parse(day))&&new Date(day).toISOString().slice(0,10)===day?day:'';};
+export function cityBreakdown(rows){
+  const fold=s=>String(s||'').trim().replace(/\s+/g,' ').normalize('NFD').replace(/\p{M}/gu,'').toLocaleLowerCase('pt-BR');
+  const states=new Map();for(const entry of 'AC:Acre|AL:Alagoas|AP:Amapá|AM:Amazonas|BA:Bahia|CE:Ceará|DF:Distrito Federal|ES:Espírito Santo|GO:Goiás|MA:Maranhão|MT:Mato Grosso|MS:Mato Grosso do Sul|MG:Minas Gerais|PA:Pará|PB:Paraíba|PR:Paraná|PE:Pernambuco|PI:Piauí|RJ:Rio de Janeiro|RN:Rio Grande do Norte|RS:Rio Grande do Sul|RO:Rondônia|RR:Roraima|SC:Santa Catarina|SP:São Paulo|SE:Sergipe|TO:Tocantins'.split('|')){const [uf,name]=entry.split(':');states.set(fold(uf),uf);states.set(fold(name),uf);}
+  const title=s=>s.trim().replace(/\s+/g,' ').toLocaleLowerCase('pt-BR').split(' ').map((word,index)=>index&&['de','do','da','dos','das','e'].includes(word)?word:word.replace(/(^|-)\p{L}/gu,c=>c.toLocaleUpperCase('pt-BR'))).join(' ');
+  const groups=new Map();let total=0,missing=0;
+  for(const row of rows){const count=Number(row.count)||0,raw=String(row.city||'').trim(),isMissing=!raw,city=isMissing?'Não informada':title(raw),state=isMissing?'':states.get(fold(row.state))||String(row.state||'').trim().toLocaleUpperCase('pt-BR'),key=isMissing?'missing':JSON.stringify([fold(raw),fold(state)]);total+=count;if(isMissing)missing+=count;const accents=(raw.normalize('NFD').match(/\p{M}/gu)||[]).length;const existing=groups.get(key);if(existing){existing.count+=count;if(accents>existing.accents){existing.city=city;existing.accents=accents;}}else groups.set(key,{city,state,count,missing:isMissing,accents});}
+  return {total,missing,rows:[...groups.values()].sort((a,b)=>b.count-a.count||a.city.localeCompare(b.city,'pt-BR')||a.state.localeCompare(b.state)).map(({accents,...row})=>({...row,percentage:total?row.count/total*100:0}))};
+}
 async function body(req) {
   if (!req.headers.get('content-type')?.includes('application/json')) fail(415,'Envie JSON.');
   const text = await req.text();
@@ -54,6 +62,11 @@ async function api(req, env, path) {
   const user=await db.prepare('SELECT u.id,u.username,u.name,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.active=1').bind(tokenHash,now).first();
   if(!user) fail(401,'Entre para acessar a plataforma.');
   if(path==='/me' && method==='GET') return json(user);
+  if(path==='/base-cities' && method==='GET'){
+    if(user.role!=='admin')fail(403,'Somente administradores podem acessar os dados da base.');
+    const rows=await db.prepare('SELECT city,state,COUNT(*) count FROM contacts GROUP BY city,state').all();
+    return json(cityBreakdown(rows.results));
+  }
   if(path==='/analytics' && method==='GET') {
     if(user.role!=='admin')fail(403,'Somente administradores podem acessar o painel.');
     const days=Math.min(90,Math.max(1,parseInt(new URL(req.url).searchParams.get('days'))||30));
