@@ -54,6 +54,10 @@ Os quadros Principal, Pendentes, Finalizados, Interessados e Reservas realizadas
 
 ## Compartilhamento e painel
 
-A imagem pública de compartilhamento de `/campanhas/` está em `assets/campanhas-compartilhamento-v1.png`, com as tags Open Graph no HTML inicial e nenhuma informação dos hóspedes. Os campos de senha têm controle acessível para mostrar e ocultar o texto.
+A imagem pública atual de compartilhamento de `/campanhas/` está em `assets/campanhas-compartilhamento-v2.png`, com as tags Open Graph no HTML inicial e nenhuma informação dos hóspedes. Os campos de senha têm controle acessível para mostrar e ocultar o texto.
 
 A migração `0005_unique_homepage_visits.sql` adiciona o registro de visitantes anônimos por dia. O gráfico do painel apresenta acessos únicos diários e números em cada barra. O cartão de acessos considera visitantes distintos no período escolhido; portanto, pode ser menor que a soma dos dias. Cliques continuam sendo contados como eventos.
+
+## Idade dos hóspedes
+
+A idade aparece junto ao nome quando a data de nascimento é válida. O cálculo é atualizado a cada renderização, considera o aniversário e usa a data de Fortaleza. Datas ausentes, inválidas ou futuras não geram uma idade. A imagem de compartilhamento v2 usa o símbolo em destaque para permanecer legível em miniaturas, com URL própria para evitar reaproveitar o arquivo v1 em cache.
