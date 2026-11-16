@@ -65,3 +65,7 @@ A idade aparece junto ao nome quando a data de nascimento é válida. O cálculo
 ## Aniversariantes do mês
 
 Dentro da Principal, a aba Aniversariantes do mês filtra hóspedes elegíveis para envio cujo nascimento corresponde ao mês atual em Fortaleza. Pendentes, finalizados, inativos, bloqueados e contatos sem telefone não entram nesse filtro. O envio e o retorno à Principal continuam usando o mesmo fluxo; a seleção e a edição individual da mensagem permanecem disponíveis.
+
+## Paginação dos contatos
+
+As listas exibem até 10 clientes por página, incluindo Principal e Aniversariantes do mês. O intervalo mostrado e o total são retornados pelo servidor. A busca e a troca de filtro reiniciam na primeira página; se a última página encolher após um envio, o servidor ajusta a página automaticamente.

@@ -103,3 +103,15 @@ test('birthday tab only includes eligible Principal guests in the Fortaleza mont
   assert.equal((await call('/dispatch',{contact_id:'nov',message_id:'m'},cookie,true)).status,303);assert.equal((await birthdays()).total,0);
   await call('/return',{id:'nov'},cookie);assert.equal((await birthdays()).total,1);sqlite.close();
 });
+test('Principal and birthdays paginate ten clients with accurate visible ranges',async t=>{
+  t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,10,18,12)});
+  const sqlite=new DatabaseSync(':memory:');for(const name of ['0001_campanhas.sql','0003_contact_details.sql','0004_reserva_realizada.sql'])sqlite.exec(await readFile('migrations/'+name,'utf8'));
+  sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)').run('a','admin','Admin',await hashPassword('test-password'),'admin');
+  const insert=sqlite.prepare('INSERT INTO contacts(id,name,phone,source_key,birth_date,registered_at) VALUES(?,?,?,?,?,?)');for(let i=1;i<=25;i++)insert.run('c'+i,'Cliente '+String(i).padStart(2,'0'),String(5591999900000+i),'source'+i,'1990-11-01','2026-10-'+String(i).padStart(2,'0'));
+  const env={DB:adapter(sqlite)},login=await worker.fetch(new Request('https://curio.test/api/campanhas/login',{method:'POST',headers:{Origin:'https://curio.test','Content-Type':'application/json'},body:JSON.stringify({username:'admin',password:'test-password'})}),env),cookie=login.headers.get('Set-Cookie').split(';')[0];
+  const get=async(tab,page,q='')=>await (await worker.fetch(new Request('https://curio.test/api/campanhas/queue?'+new URLSearchParams({tab,page,q}),{headers:{Cookie:cookie}}),env)).json();
+  for(const tab of ['principal','aniversariantes']){
+    const a=await get(tab,1),b=await get(tab,2),c=await get(tab,3);assert.deepEqual([a.rows.length,b.rows.length,c.rows.length],[10,10,5]);assert.deepEqual([a.from,a.to,b.from,b.to,c.from,c.to],[1,10,11,20,21,25]);assert.equal(a.total,25);assert.equal(a.page_size,10);assert.equal(a.pages,3);assert.equal(a.rows[0].id,'c25');assert.equal(c.rows.at(-1).id,'c1');assert.equal(new Set([...a.rows,...b.rows,...c.rows].map(r=>r.id)).size,25);
+    const beyond=await get(tab,999);assert.equal(beyond.page,3);assert.equal(beyond.rows.length,5);const filtered=await get(tab,99,'Cliente 25');assert.equal(filtered.page,1);assert.equal(filtered.total,1);assert.deepEqual([filtered.from,filtered.to],[1,1]);const empty=await get(tab,1,'Sem resultado');assert.deepEqual([empty.total,empty.from,empty.to,empty.rows.length],[0,0,0,0]);
+  }sqlite.close();
+});
