@@ -109,9 +109,16 @@ async function api(req, env, path) {
     const from=latestJoin+' WHERE '+conditions.join(' AND ');
     const total=await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first();
     const pageSize=10,pages=Math.ceil(total.total/pageSize),page=Math.min(requestedPage,Math.max(1,pages));
-    const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.registered_at,c.occupation,c.birth_date,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.campaign_id,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.registered_at DESC,c.name COLLATE NOCASE,c.id LIMIT ? OFFSET ?').bind(...args,pageSize,(page-1)*pageSize).all();
+    const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.registered_at,c.occupation,c.birth_date,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.campaign_id,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.registered_at ASC,c.name COLLATE NOCASE,c.id LIMIT ? OFFSET ?').bind(...args,pageSize,(page-1)*pageSize).all();
     const first=rows.results.length?(page-1)*pageSize+1:0,last=first?first+rows.results.length-1:0;
     return json({rows:rows.results,total:total.total,page,pages,page_size:pageSize,from:first,to:last,month:calendarParts.month});
+  }
+  if(path==='/contact' && method==='GET') {
+    const id=clean(new URL(req.url).searchParams.get('id'),80);
+    const c=await db.prepare('SELECT phone,active,opted_out FROM contacts WHERE id=?').bind(id).first();
+    if(!c||!c.phone||!c.active||c.opted_out)fail(404,'Este contato não está disponível.');
+    await audit(user.id,'abriu_contato',id);
+    return new Response(null,{status:303,headers:{Location:'https://wa.me/'+c.phone,'Cache-Control':'no-store'}});
   }
   if(path==='/dispatch' && method==='POST') {
     if(!req.headers.get('content-type')?.includes('application/x-www-form-urlencoded')) fail(415,'Formulário inválido.');
@@ -175,7 +182,7 @@ async function api(req, env, path) {
     if(status==='bloqueado') conditions.push('c.opted_out=1');
     const from=" FROM contacts c LEFT JOIN interactions i ON c.id=i.contact_id AND i.campaign_id=? WHERE "+conditions.join(' AND ');
     const total=await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first();
-    const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.registered_at,c.occupation,c.birth_date,c.active,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.registered_at DESC,c.name COLLATE NOCASE,c.id LIMIT 40 OFFSET ?').bind(...args,(page-1)*40).all();
+    const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.registered_at,c.occupation,c.birth_date,c.active,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.registered_at ASC,c.name COLLATE NOCASE,c.id LIMIT 40 OFFSET ?').bind(...args,(page-1)*40).all();
     return json({rows:rows.results,total:total.total,page,pages:Math.ceil(total.total/40)});
   }
   const contactMatch=path.match(/^\/contacts\/([\w-]+)$/);
