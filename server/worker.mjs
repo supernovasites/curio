@@ -146,7 +146,6 @@ export default {
     let response;
     try {
       if(path.startsWith('/api/campanhas/')) response=await api(req,env,path.slice('/api/campanhas'.length));
-      else if(path==='/campanhas' || path==='/campanhas/') response=await env.ASSETS.fetch(new Request(new URL('/campanhas/index.html',req.url),req));
       else if(path.startsWith('/api/')) response=json({error:'Recurso não encontrado.'},404);
       else response=await env.ASSETS.fetch(req);
     } catch(e) { response=json({error:e.status ? e.message : 'Não foi possível concluir. Tente novamente.'},e.status || 500); }
