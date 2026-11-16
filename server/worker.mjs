@@ -53,6 +53,14 @@ async function api(req, env, path) {
   const user=await db.prepare('SELECT u.id,u.username,u.name,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.active=1').bind(tokenHash,now).first();
   if(!user) fail(401,'Entre para acessar a plataforma.');
   if(path==='/me' && method==='GET') return json(user);
+  if(path==='/analytics' && method==='GET') {
+    if(user.role!=='admin')fail(403,'Somente administradores podem acessar o painel.');
+    const days=Math.min(90,Math.max(1,parseInt(new URL(req.url).searchParams.get('days'))||30));
+    const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const start=new Date(Date.parse(today+'T00:00:00Z')-(days-1)*86400000).toISOString().slice(0,10);
+    const rows=await db.prepare("SELECT day,SUM(CASE WHEN kind='visita' THEN count ELSE 0 END) acessos,SUM(CASE WHEN kind='reserva_online' THEN count ELSE 0 END) reservas,SUM(CASE WHEN kind='whatsapp' THEN count ELSE 0 END) whatsapp FROM homepage_metrics WHERE day>=? AND day<=? GROUP BY day ORDER BY day DESC").bind(start,today).all();
+    return json({rows:rows.results,start,today,days,timezone:'America/Fortaleza'});
+  }
   if(path==='/import' && method==='POST') {
     if(user.role!=='admin') fail(403,'Somente administradores podem importar a base.');
     const b=await body(req);
@@ -70,6 +78,50 @@ async function api(req, env, path) {
   if(path==='/logout' && method==='POST') {
     await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(tokenHash).run();
     return json({ok:true},200,{'Set-Cookie':'curio_session=; Path=/api/campanhas; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});
+  }
+  // Queue membership is global: choosing another saved message never resets a guest.
+  const latestJoin=" FROM contacts c LEFT JOIN interactions i ON i.rowid=(SELECT x.rowid FROM interactions x WHERE x.contact_id=c.id ORDER BY x.updated_at DESC,x.rowid DESC LIMIT 1) ";
+  if(path==='/summary' && method==='GET') return json(await db.prepare("SELECT COUNT(*) total,SUM(CASE WHEN COALESCE(i.status,'nao_contatado')='nao_contatado' AND c.phone<>'' AND c.active=1 AND c.opted_out=0 THEN 1 ELSE 0 END) principal,SUM(CASE WHEN i.status='aguardando' THEN 1 ELSE 0 END) pendentes,SUM(CASE WHEN i.status IN ('interessado','sem_interesse','sem_resposta') THEN 1 ELSE 0 END) finalizados,SUM(CASE WHEN i.status='interessado' THEN 1 ELSE 0 END) interessados,SUM(CASE WHEN i.status='sem_interesse' THEN 1 ELSE 0 END) sem_interesse,SUM(CASE WHEN i.status='sem_resposta' THEN 1 ELSE 0 END) sem_resposta,SUM(CASE WHEN c.phone='' OR c.active=0 OR c.opted_out=1 THEN 1 ELSE 0 END) indisponiveis"+latestJoin).first());
+  if(path==='/queue' && method==='GET') {
+    const url=new URL(req.url),tab=url.searchParams.get('tab')||'principal',q=clean(url.searchParams.get('q'),100),page=Math.max(1,Math.min(100000,parseInt(url.searchParams.get('page'))||1));
+    const groups={principal:"COALESCE(i.status,'nao_contatado')='nao_contatado' AND c.phone<>'' AND c.active=1 AND c.opted_out=0",pendentes:"i.status='aguardando'",finalizados:"i.status IN ('interessado','sem_interesse','sem_resposta')"};
+    if(!groups[tab]) fail(400,'Área inválida.');
+    const args=[],conditions=[groups[tab]];
+    if(q){conditions.push('(c.name LIKE ? OR c.city LIKE ?)');args.push('%'+q+'%','%'+q+'%');}
+    const from=latestJoin+' WHERE '+conditions.join(' AND ');
+    const total=await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first();
+    const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.campaign_id,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.name COLLATE NOCASE,c.id LIMIT 30 OFFSET ?').bind(...args,(page-1)*30).all();
+    return json({rows:rows.results,total:total.total,page,pages:Math.ceil(total.total/30)});
+  }
+  if(path==='/dispatch' && method==='POST') {
+    if(!req.headers.get('content-type')?.includes('application/x-www-form-urlencoded')) fail(415,'Formulário inválido.');
+    const raw=await req.text();if(raw.length>1000)fail(413,'Formulário muito grande.');
+    const form=new URLSearchParams(raw),id=clean(form.get('contact_id'),80),messageId=clean(form.get('message_id'),80);
+    const c=await db.prepare('SELECT id,name,phone,active,opted_out FROM contacts WHERE id=?').bind(id).first();
+    const message=await db.prepare('SELECT id,message FROM campaigns WHERE id=?').bind(messageId).first();
+    if(!c||!c.phone||!c.active||c.opted_out)fail(400,'Este hóspede não está disponível para envio.');
+    if(!message)fail(400,'Selecione uma mensagem salva.');
+    const result=await db.prepare("INSERT INTO interactions(campaign_id,contact_id,status,sent_at,updated_by) SELECT ?,c.id,'aguardando',CURRENT_TIMESTAMP,? FROM contacts c WHERE c.id=? AND c.active=1 AND c.opted_out=0 AND c.phone<>'' AND NOT EXISTS(SELECT 1 FROM interactions x WHERE x.contact_id=c.id AND x.status<>'nao_contatado') ON CONFLICT(campaign_id,contact_id) DO UPDATE SET status='aguardando',sent_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,updated_by=excluded.updated_by WHERE interactions.status='nao_contatado'").bind(message.id,user.id,c.id).run();
+    if(Number(result.meta?.changes??result.changes)!==1)fail(409,'Este hóspede já foi movido para acompanhamento. Atualize a lista.');
+    await audit(user.id,'abriu_whatsapp',c.id);
+    const text=message.message.replaceAll('{nome}',c.name.split(/\s+/)[0]);
+    return new Response(null,{status:303,headers:{Location:'https://wa.me/'+c.phone+'?text='+encodeURIComponent(text),'Cache-Control':'no-store'}});
+  }
+  if(path==='/outcome' && method==='POST') {
+    const b=await body(req);
+    if(!['interessado','sem_interesse','sem_resposta'].includes(b.status))fail(400,'Selecione um resultado.');
+    const latest=await db.prepare('SELECT rowid,status FROM interactions WHERE contact_id=? ORDER BY updated_at DESC,rowid DESC LIMIT 1').bind(clean(b.id,80)).first();
+    if(!latest||latest.status!=='aguardando')fail(409,'Este hóspede não está pendente de retorno. Atualize a lista.');
+    const result=await db.prepare("UPDATE interactions SET status=?,notes=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE rowid=? AND status='aguardando'").bind(b.status,clean(b.notes,2000),user.id,latest.rowid).run();
+    if(Number(result.meta?.changes??result.changes)!==1)fail(409,'Resultado já atualizado por outra pessoa.');
+    await audit(user.id,'finalizou_atendimento',clean(b.id,80));return json({ok:true});
+  }
+  if(path==='/return' && method==='POST') {
+    const b=await body(req),id=clean(b.id,80);
+    const latest=await db.prepare('SELECT rowid,status FROM interactions WHERE contact_id=? ORDER BY updated_at DESC,rowid DESC LIMIT 1').bind(id).first();
+    if(!latest||latest.status!=='aguardando')fail(409,'Este hóspede não está pendente.');
+    await db.prepare("UPDATE interactions SET status='nao_contatado',sent_at=NULL,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE rowid=? AND status='aguardando'").bind(user.id,latest.rowid).run();
+    await audit(user.id,'devolveu_principal',id);return json({ok:true});
   }
   if(path==='/campaigns' && method==='GET') return json((await db.prepare('SELECT id,name,message,created_at FROM campaigns ORDER BY created_at DESC,id').all()).results);
   if(path==='/campaigns' && method==='POST') {
@@ -95,13 +147,13 @@ async function api(req, env, path) {
     }
     const q=clean(url.searchParams.get('q'),100), status=url.searchParams.get('status')||'', page=Math.max(1,Math.min(100000,parseInt(url.searchParams.get('page'))||1));
     const conditions=['1=1'],args=[campaign];
-    if(q) { conditions.push('(c.name LIKE ? OR c.phone LIKE ? OR c.city LIKE ?)'); args.push(...Array(3).fill('%'+q+'%')); }
+    if(q) { conditions.push('(c.name LIKE ? OR c.city LIKE ?)'); args.push(...Array(2).fill('%'+q+'%')); }
     if(statuses.includes(status)) {conditions.push("COALESCE(i.status,'nao_contatado')=?");args.push(status);}
     if(status==='sem_telefone') conditions.push("c.phone=''");
     if(status==='bloqueado') conditions.push('c.opted_out=1');
     const from=" FROM contacts c LEFT JOIN interactions i ON c.id=i.contact_id AND i.campaign_id=? WHERE "+conditions.join(' AND ');
     const total=await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first();
-    const rows=await db.prepare("SELECT c.id,c.name,c.phone,c.city,c.state,c.active,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.name COLLATE NOCASE,c.id LIMIT 40 OFFSET ?').bind(...args,(page-1)*40).all();
+    const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.active,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.name COLLATE NOCASE,c.id LIMIT 40 OFFSET ?').bind(...args,(page-1)*40).all();
     return json({rows:rows.results,total:total.total,page,pages:Math.ceil(total.total/40)});
   }
   const contactMatch=path.match(/^\/contacts\/([\w-]+)$/);
@@ -145,15 +197,25 @@ export default {
     const path=new URL(req.url).pathname;
     let response;
     try {
-      if(path.startsWith('/api/campanhas/')) response=await api(req,env,path.slice('/api/campanhas'.length));
+      if(path==='/api/metricas' && req.method==='POST') {
+        if(req.headers.get('Origin')!==new URL(req.url).origin)fail(403,'Origem inválida.');
+        const b=await body(req);
+        if(!['visita','reserva_online','whatsapp'].includes(b.kind))fail(400,'Evento inválido.');
+        if(!env.DB)fail(503,'Indisponível.');
+        const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+        await env.DB.prepare('INSERT INTO homepage_metrics(day,kind,count) VALUES(?,?,1) ON CONFLICT(day,kind) DO UPDATE SET count=count+1').bind(day,b.kind).run();
+        response=new Response(null,{status:204});
+      }
+      else if(path.startsWith('/api/campanhas/')) response=await api(req,env,path.slice('/api/campanhas'.length));
+      else if(['/usuarios','/usuarios/','/mensagens','/mensagens/'].includes(path))response=await env.ASSETS.fetch(new Request(new URL('/campanhas/',req.url),req));
       else if(path.startsWith('/api/')) response=json({error:'Recurso não encontrado.'},404);
       else response=await env.ASSETS.fetch(req);
     } catch(e) { response=json({error:e.status ? e.message : 'Não foi possível concluir. Tente novamente.'},e.status || 500); }
     const headers=new Headers(response.headers);
-    headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','no-referrer');headers.set('X-Frame-Options','DENY');
-    if(path.startsWith('/campanhas') || path.startsWith('/api/')) {
+    headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','same-origin');headers.set('X-Frame-Options','DENY');
+    if(['/campanhas','/painel','/usuarios','/mensagens','/api/'].some(p=>path.startsWith(p))) {
       headers.set('Cache-Control','no-store');
-      headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+      headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://wa.me https://*.whatsapp.com");
     }
     return new Response(response.body,{status:response.status,headers});
   }

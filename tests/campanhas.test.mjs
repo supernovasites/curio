@@ -30,3 +30,26 @@ test('authentication, authorization, campaigns, results, opt-out and revocation'
 });
 test('rate limit prevents repeated login guessing',async()=>{const sqlite=new DatabaseSync(':memory:');sqlite.exec(await readFile('migrations/0001_campanhas.sql','utf8'));const env={DB:adapter(sqlite)};for(let i=0;i<11;i++){const res=await worker.fetch(new Request('https://curio.test/api/campanhas/login',{method:'POST',headers:{Origin:'https://curio.test','Content-Type':'application/json'},body:JSON.stringify({username:'missing',password:'wrong'})}),env);assert.equal(res.status,i<10?401:429);}sqlite.close();});
 test('campaign pages preserve asset URL and security headers',async()=>{for(const path of ['/campanhas','/campanhas/']){let assetPath;const res=await worker.fetch(new Request('https://curio.test'+path),{ASSETS:{fetch:async req=>{assetPath=new URL(req.url).pathname;return new Response('page');}}});assert.equal(assetPath,path);assert.equal(res.status,200);assert.equal(res.headers.get('Cache-Control'),'no-store');assert.match(res.headers.get('Content-Security-Policy'),/frame-ancestors 'none'/);}});
+test('private queues, WhatsApp dispatch, outcomes and admin daily analytics',async()=>{
+  const sqlite=new DatabaseSync(':memory:');
+  sqlite.exec(await readFile('migrations/0001_campanhas.sql','utf8'));sqlite.exec(await readFile('migrations/0002_homepage_metrics.sql','utf8'));
+  sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)').run('admin','admin','Admin',await hashPassword('test-password'),'admin');
+  sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)').run('op','operador','Operador',await hashPassword('test-password'),'operador');
+  sqlite.exec("INSERT INTO contacts(id,name,phone,source_key) VALUES('c1','Pessoa Teste','5591999991234','one'),('c2','Sem número','','two'); INSERT INTO campaigns(id,name,message) VALUES('m1','Mensagem 1','Olá, {nome}!'),('m2','Mensagem 2','Outra mensagem');");
+  const env={DB:adapter(sqlite)},call=(path,method='GET',data,cookie,form=false)=>worker.fetch(new Request('https://curio.test'+path,{method,headers:{Origin:'https://curio.test','Content-Type':form?'application/x-www-form-urlencoded':'application/json',...(cookie?{Cookie:cookie}:{})},...(data?{body:form?new URLSearchParams(data).toString():JSON.stringify(data)}:{})}),env);
+  const login=await call('/api/campanhas/login','POST',{username:'admin',password:'test-password'}),cookie=login.headers.get('Set-Cookie').split(';')[0];
+  const queue=async tab=>(await (await call('/api/campanhas/queue?tab='+tab,'GET',null,cookie)).json());
+  const initial=await queue('principal');assert.equal(initial.total,1);assert.equal(initial.rows[0].name,'Pessoa Teste');assert.equal(JSON.stringify(initial).includes('5591999991234'),false);assert.equal('phone' in initial.rows[0],false);
+  assert.equal((await call('/api/campanhas/outcome','POST',{id:'c1',status:'interessado'},cookie)).status,409);
+  const dispatched=await call('/api/campanhas/dispatch','POST',{contact_id:'c1',message_id:'m1'},cookie,true);assert.equal(dispatched.status,303);assert.equal(dispatched.headers.get('Location'),'https://wa.me/5591999991234?text=Ol%C3%A1%2C%20Pessoa!');assert.equal((await queue('principal')).total,0);assert.equal((await queue('pendentes')).total,1);
+  assert.equal((await call('/api/campanhas/dispatch','POST',{contact_id:'c1',message_id:'m2'},cookie,true)).status,409);
+  assert.equal((await call('/api/campanhas/outcome','POST',{id:'c1',status:'interessado',notes:'Retornar'},cookie)).status,200);assert.equal((await queue('pendentes')).total,0);assert.equal((await queue('finalizados')).total,1);assert.equal((await queue('principal')).total,0);
+  assert.equal((await call('/api/campanhas/outcome','POST',{id:'c1',status:'sem_interesse'},cookie)).status,409);
+  const summary=await (await call('/api/campanhas/summary','GET',null,cookie)).json();assert.equal(summary.interessados,1);assert.equal(summary.finalizados,1);assert.equal(summary.indisponiveis,1);
+  const legacy=await (await call('/api/campanhas/contacts?campaign=m1','GET',null,cookie)).json();assert.equal(JSON.stringify(legacy).includes('5591999991234'),false);
+  for(const kind of ['visita','visita','reserva_online','whatsapp'])assert.equal((await call('/api/metricas','POST',{kind})).status,204);
+  const stats=await (await call('/api/campanhas/analytics?days=7','GET',null,cookie)).json();assert.equal(stats.rows[0].acessos,2);assert.equal(stats.rows[0].reservas,1);assert.equal(stats.rows[0].whatsapp,1);assert.match(stats.today,/^\d{4}-\d{2}-\d{2}$/);
+  assert.equal((await call('/api/campanhas/analytics')).status,401);
+  const opLogin=await call('/api/campanhas/login','POST',{username:'operador',password:'test-password'});const opCookie=opLogin.headers.get('Set-Cookie').split(';')[0];assert.equal((await call('/api/campanhas/analytics','GET',null,opCookie)).status,403);
+  assert.equal((await call('/api/metricas','POST',{kind:'other'})).status,400);sqlite.close();
+});

@@ -4,11 +4,11 @@ Homepage existente e plataforma autenticada em `/campanhas`, executadas em Cloud
 
 ## Funcionalidades
 
-- Campanhas independentes com mensagem inicial e variável `{nome}`.
-- Dashboard global por campanha; busca e filtros na tabela.
-- WhatsApp Web ou celular, com envio manual. Abrir a conversa não registra envio nem detecta respostas.
+- Mensagens reutilizáveis em `/mensagens/`, com a variável `{nome}`.
+- Fila global: Principal, Pendente de retorno e Finalizados. Trocar a mensagem não reinicia o acompanhamento.
+- O servidor abre o WhatsApp e move o hóspede para pendente. Isso registra a abertura da conversa, não comprova o envio nem detecta respostas. O envio é feito no WhatsApp. Se não enviar, a equipe pode devolver o hóspede à principal.
 - Estados exclusivos: não contatado, aguardando, interessado, sem interesse, sem resposta.
-- Bloqueio de contato para todas as campanhas e observações por campanha.
+- Os nomes expandem ao toque. Pendentes recebem um resultado exclusivo e passam para Finalizados. Telefones não são retornados nas listagens nem exibidos no HTML; são usados apenas pelo servidor para redirecionar ao WhatsApp após a ação de enviar. Não há exportação ou cópia de números. O WhatsApp e seu endereço de destino necessariamente recebem o número individual.
 - Administradores podem criar, editar e bloquear usuários; operadores gerenciam campanhas e contatos.
 - Importação administrativa de CSV; somente nome, telefone, cidade, estado e ativo. CPF, RG, endereço, passaporte e nascimento não são importados.
 
@@ -33,3 +33,11 @@ Para desenvolvimento opcional, `scripts/bootstrap.mjs` aceita JSON com login/sen
 ## Escolha da integração
 
 O fluxo mais simples para atendimento manual é o [Clique para conversar oficial do WhatsApp](https://faq.whatsapp.com/5913398998672934), com mensagem preenchida. Integração futura pela WhatsApp Business Platform é necessária caso se deseje automatizar o envio e receber eventos de resposta; não há leitura de conversas do WhatsApp Web nesta plataforma.
+
+## Menu e painel
+
+O menu compartilhado atende à homepage e às rotas `/campanhas/`, `/painel/`, `/usuarios/` e `/mensagens/`. Painel e Usuários exigem perfil de administrador. `/painel/` usa a mesma sessão da plataforma.
+
+A migração `0002_homepage_metrics.sql` adiciona os contadores diários de visualizações da homepage e cliques nos botões de reserva online e WhatsApp. O fuso é America/Fortaleza. Não há reconstrução de histórico anterior à publicação, identificação de visitante único ou armazenamento de IP nos contadores. Atualizações da página contam como novos acessos. O endpoint público aceita somente três eventos; as estatísticas são acessíveis exclusivamente à administração. Os totais são indicativos e podem incluir bots com JavaScript ou testes.
+
+A prévia local simula a abertura do WhatsApp sem sair do servidor local. Os testes de fluxo não enviam mensagens.
