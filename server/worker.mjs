@@ -1,6 +1,6 @@
 import {normalizePhone} from '../campanhas/csv.js';
 const enc = new TextEncoder();
-const statuses = ['nao_contatado', 'aguardando', 'interessado', 'sem_interesse', 'sem_resposta'];
+const statuses = ['nao_contatado', 'aguardando', 'interessado', 'sem_interesse', 'sem_resposta', 'reserva_realizada'];
 const hex = a => Array.from(new Uint8Array(a), b => b.toString(16).padStart(2, '0')).join('');
 const random = () => hex(crypto.getRandomValues(new Uint8Array(32)));
 const sha = async s => hex(await crypto.subtle.digest('SHA-256', enc.encode(s)));
@@ -82,10 +82,10 @@ async function api(req, env, path) {
   }
   // Queue membership is global: choosing another saved message never resets a guest.
   const latestJoin=" FROM contacts c LEFT JOIN interactions i ON i.rowid=(SELECT x.rowid FROM interactions x WHERE x.contact_id=c.id ORDER BY (x.status<>'nao_contatado') DESC,x.updated_at DESC,x.rowid DESC LIMIT 1) ";
-  if(path==='/summary' && method==='GET') return json(await db.prepare("SELECT COUNT(*) total,SUM(CASE WHEN COALESCE(i.status,'nao_contatado')='nao_contatado' AND c.phone<>'' AND c.active=1 AND c.opted_out=0 THEN 1 ELSE 0 END) principal,SUM(CASE WHEN i.status='aguardando' THEN 1 ELSE 0 END) pendentes,SUM(CASE WHEN i.status IN ('interessado','sem_interesse','sem_resposta') THEN 1 ELSE 0 END) finalizados,SUM(CASE WHEN i.status='interessado' THEN 1 ELSE 0 END) interessados,SUM(CASE WHEN i.status='sem_interesse' THEN 1 ELSE 0 END) sem_interesse,SUM(CASE WHEN i.status='sem_resposta' THEN 1 ELSE 0 END) sem_resposta,SUM(CASE WHEN c.phone='' OR c.active=0 OR c.opted_out=1 THEN 1 ELSE 0 END) indisponiveis"+latestJoin).first());
+  if(path==='/summary' && method==='GET') return json(await db.prepare("SELECT COUNT(*) total,SUM(CASE WHEN COALESCE(i.status,'nao_contatado')='nao_contatado' AND c.phone<>'' AND c.active=1 AND c.opted_out=0 THEN 1 ELSE 0 END) principal,SUM(CASE WHEN i.status='aguardando' THEN 1 ELSE 0 END) pendentes,SUM(CASE WHEN i.status IN ('interessado','sem_interesse','sem_resposta','reserva_realizada') THEN 1 ELSE 0 END) finalizados,SUM(CASE WHEN i.status='interessado' THEN 1 ELSE 0 END) interessados,SUM(CASE WHEN i.status='reserva_realizada' THEN 1 ELSE 0 END) reservas,SUM(CASE WHEN i.status='sem_interesse' THEN 1 ELSE 0 END) sem_interesse,SUM(CASE WHEN i.status='sem_resposta' THEN 1 ELSE 0 END) sem_resposta,SUM(CASE WHEN c.phone='' OR c.active=0 OR c.opted_out=1 THEN 1 ELSE 0 END) indisponiveis"+latestJoin).first());
   if(path==='/queue' && method==='GET') {
     const url=new URL(req.url),tab=url.searchParams.get('tab')||'principal',q=clean(url.searchParams.get('q'),100),page=Math.max(1,Math.min(100000,parseInt(url.searchParams.get('page'))||1));
-    const groups={principal:"COALESCE(i.status,'nao_contatado')='nao_contatado' AND c.phone<>'' AND c.active=1 AND c.opted_out=0",pendentes:"i.status='aguardando'",finalizados:"i.status IN ('interessado','sem_interesse','sem_resposta')",interessados:"i.status='interessado'"};
+    const groups={principal:"COALESCE(i.status,'nao_contatado')='nao_contatado' AND c.phone<>'' AND c.active=1 AND c.opted_out=0",pendentes:"i.status='aguardando'",finalizados:"i.status IN ('interessado','sem_interesse','sem_resposta','reserva_realizada')",interessados:"i.status='interessado'",reservas:"i.status='reserva_realizada'"};
     if(!groups[tab]) fail(400,'Área inválida.');
     const args=[],conditions=[groups[tab]];
     if(q){conditions.push('(c.name LIKE ? OR c.city LIKE ?)');args.push('%'+q+'%','%'+q+'%');}
@@ -112,7 +112,7 @@ async function api(req, env, path) {
   }
   if(path==='/outcome' && method==='POST') {
     const b=await body(req);
-    if(!['interessado','sem_interesse','sem_resposta'].includes(b.status))fail(400,'Selecione um resultado.');
+    if(!['interessado','sem_interesse','sem_resposta','reserva_realizada'].includes(b.status))fail(400,'Selecione um resultado.');
     const latest=await db.prepare("SELECT rowid,status FROM interactions WHERE contact_id=? ORDER BY (status<>'nao_contatado') DESC,updated_at DESC,rowid DESC LIMIT 1").bind(clean(b.id,80)).first();
     if(!latest||latest.status!=='aguardando')fail(409,'Este hóspede não está pendente de retorno. Atualize a lista.');
     const result=await db.prepare("UPDATE interactions SET status=?,notes=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE rowid=? AND status='aguardando'").bind(b.status,clean(b.notes,2000),user.id,latest.rowid).run();

@@ -7,7 +7,7 @@ Homepage existente e plataforma autenticada em `/campanhas`, executadas em Cloud
 - Mensagens reutilizáveis em `/mensagens/`, com a variável `{nome}`.
 - Fila global: Principal, Pendente de retorno e Finalizados. Trocar a mensagem não reinicia o acompanhamento.
 - O servidor abre o WhatsApp e move o hóspede para pendente. Isso registra a abertura da conversa, não comprova o envio nem detecta respostas. O envio é feito no WhatsApp. Se não enviar, a equipe pode devolver o hóspede à principal.
-- Estados exclusivos: não contatado, aguardando, interessado, sem interesse, sem resposta.
+- Estados exclusivos: não contatado, aguardando, interessado, sem interesse, sem resposta e reserva realizada.
 - Os nomes expandem ao toque. Pendentes recebem um resultado exclusivo e passam para Finalizados. Telefones não são retornados nas listagens nem exibidos no HTML; são usados apenas pelo servidor para redirecionar ao WhatsApp após a ação de enviar. Não há exportação ou cópia de números. O WhatsApp e seu endereço de destino necessariamente recebem o número individual.
 - Administradores podem criar, editar e bloquear usuários; operadores gerenciam campanhas e contatos.
 - Importação administrativa de CSV; nome, telefone, cidade, estado, ativo, data de cadastro, profissão e nascimento. CPF, RG, endereço e passaporte não são importados.
@@ -47,3 +47,7 @@ A prévia local simula a abertura do WhatsApp sem sair do servidor local. Os tes
 Cidade, data de cadastro, profissão e nascimento aparecem junto ao nome. Campos ausentes são identificados como não informados. A migração `0003_contact_details.sql` deve ser aplicada antes de publicar esta versão. Reimportar o CSV original preenche os dados sem reiniciar as filas ou apagar resultados.
 
 Ao expandir um hóspede na principal, a mensagem selecionada aparece preenchida com o primeiro nome e pode ser ajustada apenas para aquele envio. A mensagem padrão salva não é alterada. Em Pendente de retorno, a ação “Voltar à principal para reenviar” permite uma nova tentativa, inclusive escolhendo outra mensagem.
+
+## Filtros e reservas
+
+Os quadros Principal, Pendentes, Finalizados, Interessados e Reservas realizadas filtram a listagem. A ordenação considera a data de cadastro, da mais recente à mais antiga; cadastros sem data ficam no fim. A situação Reserva realizada é um resultado final e participa de Finalizados e do filtro específico de reservas. A migração `0004_reserva_realizada.sql` amplia a validação de estados copiando todo o histórico, incluindo os rowids, para a nova definição antes de substituir a tabela.
