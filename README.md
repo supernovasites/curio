@@ -38,7 +38,7 @@ O fluxo mais simples para atendimento manual é o [Clique para conversar oficial
 
 O menu compartilhado atende às rotas `/campanhas/`, `/painel/`, `/usuarios/` e `/mensagens/`. Painel e Usuários exigem perfil de administrador. `/painel/` usa a mesma sessão da plataforma.
 
-A migração `0002_homepage_metrics.sql` adiciona os contadores diários de visualizações da homepage e cliques nos botões de reserva online e WhatsApp. O fuso é America/Fortaleza. Não há reconstrução de histórico anterior à publicação, identificação de visitante único ou armazenamento de IP nos contadores. Atualizações da página contam como novos acessos. O endpoint público aceita somente três eventos; as estatísticas são acessíveis exclusivamente à administração. Os totais são indicativos e podem incluir bots com JavaScript ou testes.
+A migração `0002_homepage_metrics.sql` adiciona os contadores diários de visualizações da homepage e cliques nos botões de reserva online e WhatsApp. O fuso é America/Fortaleza. A contagem única usa um identificador anônimo em cookie próprio, com validade de um ano. O servidor armazena apenas o hash e deduplica por dia; o total do período usa visitantes distintos. Não há armazenamento de IP nos contadores. Limpar cookies, usar outro navegador ou outro dispositivo gera outro identificador. Os contadores antigos de visualizações ficam preservados no banco, mas não são usados como acessos únicos. O endpoint público aceita somente três eventos; as estatísticas são acessíveis exclusivamente à administração. Os totais são indicativos e podem incluir bots com JavaScript ou testes.
 
 A prévia local simula a abertura do WhatsApp sem sair do servidor local. Os testes de fluxo não enviam mensagens.
 
@@ -51,3 +51,9 @@ Ao expandir um hóspede na principal, a mensagem selecionada aparece preenchida 
 ## Filtros e reservas
 
 Os quadros Principal, Pendentes, Finalizados, Interessados e Reservas realizadas filtram a listagem. A ordenação considera a data de cadastro, da mais recente à mais antiga; cadastros sem data ficam no fim. A situação Reserva realizada é um resultado final e participa de Finalizados e do filtro específico de reservas. A migração `0004_reserva_realizada.sql` amplia a validação de estados copiando todo o histórico, incluindo os rowids, para a nova definição antes de substituir a tabela.
+
+## Compartilhamento e painel
+
+A imagem pública de compartilhamento de `/campanhas/` está em `assets/campanhas-compartilhamento-v1.png`, com as tags Open Graph no HTML inicial e nenhuma informação dos hóspedes. Os campos de senha têm controle acessível para mostrar e ocultar o texto.
+
+A migração `0005_unique_homepage_visits.sql` adiciona o registro de visitantes anônimos por dia. O gráfico do painel apresenta acessos únicos diários e números em cada barra. O cartão de acessos considera visitantes distintos no período escolhido; portanto, pode ser menor que a soma dos dias. Cliques continuam sendo contados como eventos.

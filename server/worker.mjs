@@ -59,8 +59,9 @@ async function api(req, env, path) {
     const days=Math.min(90,Math.max(1,parseInt(new URL(req.url).searchParams.get('days'))||30));
     const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
     const start=[new Date(Date.parse(today+'T00:00:00Z')-(days-1)*86400000).toISOString().slice(0,10),'2026-11-16'].sort().at(-1);
-    const rows=await db.prepare("SELECT day,SUM(CASE WHEN kind='visita' THEN count ELSE 0 END) acessos,SUM(CASE WHEN kind='reserva_online' THEN count ELSE 0 END) reservas,SUM(CASE WHEN kind='whatsapp' THEN count ELSE 0 END) whatsapp FROM homepage_metrics WHERE day>=? AND day<=? GROUP BY day ORDER BY day DESC").bind(start,today).all();
-    return json({rows:rows.results,start,today,days:Math.max(1,Math.round((Date.parse(today)-Date.parse(start))/86400000)+1),timezone:'America/Fortaleza'});
+    const rows=await db.prepare("SELECT day,SUM(acessos) acessos,SUM(reservas) reservas,SUM(whatsapp) whatsapp FROM (SELECT day,COUNT(*) acessos,0 reservas,0 whatsapp FROM homepage_visits WHERE day>=? AND day<=? GROUP BY day UNION ALL SELECT day,0 acessos,SUM(CASE WHEN kind='reserva_online' THEN count ELSE 0 END) reservas,SUM(CASE WHEN kind='whatsapp' THEN count ELSE 0 END) whatsapp FROM homepage_metrics WHERE day>=? AND day<=? AND kind IN ('reserva_online','whatsapp') GROUP BY day) GROUP BY day ORDER BY day DESC").bind(start,today,start,today).all();
+    const unique=await db.prepare('SELECT COUNT(DISTINCT visitor_hash) total FROM homepage_visits WHERE day>=? AND day<=?').bind(start,today).first();
+    return json({rows:rows.results,unique_visitors:unique.total,start,today,days:Math.max(1,Math.round((Date.parse(today)-Date.parse(start))/86400000)+1),timezone:'America/Fortaleza'});
   }
   if(path==='/import' && method==='POST') {
     if(user.role!=='admin') fail(403,'Somente administradores podem importar a base.');
@@ -206,8 +207,15 @@ export default {
         if(!['visita','reserva_online','whatsapp'].includes(b.kind))fail(400,'Evento inválido.');
         if(!env.DB)fail(503,'Indisponível.');
         const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-        await env.DB.prepare('INSERT INTO homepage_metrics(day,kind,count) VALUES(?,?,1) ON CONFLICT(day,kind) DO UPDATE SET count=count+1').bind(day,b.kind).run();
-        response=new Response(null,{status:204});
+        if(b.kind==='visita') {
+          const existing=(req.headers.get('Cookie')||'').match(/(?:^|;\s*)curio_visitor=([a-f0-9]{64})(?:;|$)/)?.[1];
+          const visitor=existing||random();
+          await env.DB.prepare('INSERT INTO homepage_visits(day,visitor_hash) VALUES(?,?) ON CONFLICT(day,visitor_hash) DO NOTHING').bind(day,await sha('visitor:'+visitor)).run();
+          response=new Response(null,{status:204,headers:existing?{}:{'Set-Cookie':`curio_visitor=${visitor}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`}});
+        } else {
+          await env.DB.prepare('INSERT INTO homepage_metrics(day,kind,count) VALUES(?,?,1) ON CONFLICT(day,kind) DO UPDATE SET count=count+1').bind(day,b.kind).run();
+          response=new Response(null,{status:204});
+        }
       }
       else if(path.startsWith('/api/campanhas/')) response=await api(req,env,path.slice('/api/campanhas'.length));
       else if(['/usuarios','/usuarios/','/mensagens','/mensagens/'].includes(path))response=await env.ASSETS.fetch(new Request(new URL('/campanhas/',req.url),req));

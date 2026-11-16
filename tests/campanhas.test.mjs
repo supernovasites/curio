@@ -33,7 +33,7 @@ test('rate limit prevents repeated login guessing',async()=>{const sqlite=new Da
 test('campaign pages preserve asset URL and security headers',async()=>{for(const path of ['/campanhas','/campanhas/']){let assetPath;const res=await worker.fetch(new Request('https://curio.test'+path),{ASSETS:{fetch:async req=>{assetPath=new URL(req.url).pathname;return new Response('page');}}});assert.equal(assetPath,path);assert.equal(res.status,200);assert.equal(res.headers.get('Cache-Control'),'no-store');assert.match(res.headers.get('Content-Security-Policy'),/frame-ancestors 'none'/);}});
 test('private queues, WhatsApp dispatch, outcomes and admin daily analytics',async()=>{
   const sqlite=new DatabaseSync(':memory:');
-  sqlite.exec(await readFile('migrations/0001_campanhas.sql','utf8'));sqlite.exec(await readFile('migrations/0003_contact_details.sql','utf8'));sqlite.exec(await readFile('migrations/0004_reserva_realizada.sql','utf8'));sqlite.exec(await readFile('migrations/0002_homepage_metrics.sql','utf8'));
+  sqlite.exec(await readFile('migrations/0001_campanhas.sql','utf8'));sqlite.exec(await readFile('migrations/0003_contact_details.sql','utf8'));sqlite.exec(await readFile('migrations/0004_reserva_realizada.sql','utf8'));sqlite.exec(await readFile('migrations/0002_homepage_metrics.sql','utf8'));sqlite.exec(await readFile('migrations/0005_unique_homepage_visits.sql','utf8'));
   sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)').run('admin','admin','Admin',await hashPassword('test-password'),'admin');
   sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)').run('op','operador','Operador',await hashPassword('test-password'),'operador');
   sqlite.exec("INSERT INTO contacts(id,name,phone,source_key) VALUES('c1','Pessoa Teste','5591999991234','one'),('c2','Sem número','','two'); INSERT INTO campaigns(id,name,message) VALUES('m1','Mensagem 1','Olá, {nome}!'),('m2','Mensagem 2','Outra mensagem');");
@@ -74,4 +74,17 @@ test('reservation migration preserves history and booking is a finalized result'
   const env={DB:adapter(sqlite)};const login=await worker.fetch(new Request('https://curio.test/api/campanhas/login',{method:'POST',headers:{Origin:'https://curio.test','Content-Type':'application/json'},body:JSON.stringify({username:'admin',password:'test-password'})}),env);const cookie=login.headers.get('Set-Cookie').split(';')[0];
   const result=await worker.fetch(new Request('https://curio.test/api/campanhas/outcome',{method:'POST',headers:{Origin:'https://curio.test','Content-Type':'application/json',Cookie:cookie},body:JSON.stringify({id:'p',status:'reserva_realizada',notes:'Reserva confirmada'})}),env);assert.equal(result.status,200);
   const get=async path=>await (await worker.fetch(new Request('https://curio.test/api/campanhas'+path,{headers:{Cookie:cookie}}),env)).json();const summary=await get('/summary');assert.equal(summary.reservas,1);assert.equal(summary.finalizados,2);assert.equal(summary.pendentes,0);assert.equal(summary.interessados,1);assert.deepEqual((await get('/queue?tab=reservas')).rows.map(c=>c.id),['p']);sqlite.close();
+});
+test('unique homepage visits ignore reloads and deduplicate the selected period',async t=>{
+  t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,10,18,15)});
+  const sqlite=new DatabaseSync(':memory:');sqlite.exec(await readFile('migrations/0001_campanhas.sql','utf8'));sqlite.exec(await readFile('migrations/0002_homepage_metrics.sql','utf8'));sqlite.exec(await readFile('migrations/0005_unique_homepage_visits.sql','utf8'));
+  sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)').run('a','admin','Admin',await hashPassword('test-password'),'admin');
+  const env={DB:adapter(sqlite)},call=(path,data,cookie)=>worker.fetch(new Request('https://curio.test'+path,{method:data?'POST':'GET',headers:{Origin:'https://curio.test','Content-Type':'application/json',...(cookie?{Cookie:cookie}:{})},...(data?{body:JSON.stringify(data)}:{})}),env);
+  const first=await call('/api/metricas',{kind:'visita'});assert.equal(first.status,204);const visitor=first.headers.get('Set-Cookie').split(';')[0];assert.match(first.headers.get('Set-Cookie'),/HttpOnly; Secure; SameSite=Lax/);
+  for(let i=0;i<3;i++)await call('/api/metricas',{kind:'visita'},visitor);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) total FROM homepage_visits').get().total,1);const hash=sqlite.prepare('SELECT visitor_hash FROM homepage_visits').get().visitor_hash;
+  assert.equal(hash.includes(visitor.split('=')[1]),false);sqlite.prepare('INSERT INTO homepage_visits VALUES(?,?)').run('2026-11-17',hash);
+  await call('/api/metricas',{kind:'visita'});await call('/api/metricas',{kind:'reserva_online'},visitor);sqlite.exec("INSERT INTO homepage_metrics VALUES('2026-11-18','visita',99)");
+  const login=await call('/api/campanhas/login',{username:'admin',password:'test-password'}),session=login.headers.get('Set-Cookie').split(';')[0];
+  const stats=await (await call('/api/campanhas/analytics?days=7',null,session)).json();assert.equal(stats.unique_visitors,2);assert.equal(stats.rows[0].acessos,2);assert.equal(stats.rows[1].acessos,1);assert.equal(stats.rows[0].reservas,1);assert.equal(JSON.stringify(stats).includes(hash),false);sqlite.close();
 });

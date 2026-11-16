@@ -8,6 +8,7 @@ sqlite.exec(await readFile('private/bootstrap.seed.sql','utf8'));
 sqlite.exec(await readFile('migrations/0002_homepage_metrics.sql','utf8'));
 if(!sqlite.prepare('PRAGMA table_info(contacts)').all().some(c=>c.name==='birth_date'))sqlite.exec(await readFile('migrations/0003_contact_details.sql','utf8'));
 sqlite.exec(await readFile('migrations/0004_reserva_realizada.sql','utf8'));
+sqlite.exec(await readFile('migrations/0005_unique_homepage_visits.sql','utf8'));
 const DB={prepare(sql){const stmt=sqlite.prepare(sql);let args=[];const api={bind(...v){args=v;return api;},async first(){return stmt.get(...args)||null;},async all(){return {results:stmt.all(...args)};},async run(){return stmt.run(...args);}};return api;},async batch(statements){sqlite.exec('BEGIN');try{const result=[];for(const s of statements)result.push(await s.run());sqlite.exec('COMMIT');return result;}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
 const root=resolve('dist'),mime={'.html':'text/html; charset=utf-8','.js':'application/javascript','.css':'text/css','.jpg':'image/jpeg'};
 const ASSETS={async fetch(req){let path=decodeURIComponent(new URL(req.url).pathname);if(path==='/')path='/index.html';let file=resolve(root,'.'+path);if(!file.startsWith(root+'/')&&!file.startsWith(root+'\\'))return new Response('Forbidden',{status:403});try{if((await stat(file)).isDirectory())file=resolve(file,'index.html');return new Response(await readFile(file),{headers:{'Content-Type':mime[extname(file)]||'application/octet-stream'}});}catch{return new Response('Not found',{status:404});}}};
