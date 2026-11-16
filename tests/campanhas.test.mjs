@@ -88,3 +88,18 @@ test('unique homepage visits ignore reloads and deduplicate the selected period'
   const login=await call('/api/campanhas/login',{username:'admin',password:'test-password'}),session=login.headers.get('Set-Cookie').split(';')[0];
   const stats=await (await call('/api/campanhas/analytics?days=7',null,session)).json();assert.equal(stats.unique_visitors,2);assert.equal(stats.rows[0].acessos,2);assert.equal(stats.rows[1].acessos,1);assert.equal(stats.rows[0].reservas,1);assert.equal(JSON.stringify(stats).includes(hash),false);sqlite.close();
 });
+test('birthday tab only includes eligible Principal guests in the Fortaleza month',async t=>{
+  t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,10,1,1)});
+  const sqlite=new DatabaseSync(':memory:');for(const name of ['0001_campanhas.sql','0003_contact_details.sql','0004_reserva_realizada.sql'])sqlite.exec(await readFile('migrations/'+name,'utf8'));
+  sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)').run('a','admin','Admin',await hashPassword('test-password'),'admin');
+  const insert=sqlite.prepare('INSERT INTO contacts(id,name,phone,source_key,birth_date,active,opted_out) VALUES(?,?,?,?,?,?,?)');
+  for(const [id,birth,phone,active,blocked] of [['oct','1990-10-03','5591999991001',1,0],['nov','1991-11-12','5591999991002',1,0],['pending','1991-11-13','5591999991003',1,0],['done','1991-11-14','5591999991004',1,0],['inactive','1991-11-15','5591999991005',0,0],['blocked','1991-11-16','5591999991006',1,1],['noPhone','1991-11-17','',1,0],['missing','','5591999991008',1,0],['future','2027-11-02','5591999991009',1,0]])insert.run(id,id,phone,id,birth,active,blocked);
+  sqlite.exec("INSERT INTO campaigns(id,name,message) VALUES('m','Mensagem','Olá'); INSERT INTO interactions(campaign_id,contact_id,status) VALUES('m','pending','aguardando'),('m','done','reserva_realizada');");
+  const env={DB:adapter(sqlite)},call=(path,data,cookie,form=false)=>worker.fetch(new Request('https://curio.test/api/campanhas'+path,{method:data?'POST':'GET',headers:{Origin:'https://curio.test','Content-Type':form?'application/x-www-form-urlencoded':'application/json',...(cookie?{Cookie:cookie}:{})},...(data?{body:form?new URLSearchParams(data).toString():JSON.stringify(data)}:{})}),env);
+  const login=await call('/login',{username:'admin',password:'test-password'}),cookie=login.headers.get('Set-Cookie').split(';')[0];
+  const birthdays=async q=>await (await call('/queue?tab=aniversariantes'+(q?'&q='+q:''),null,cookie)).json();
+  let data=await birthdays();assert.equal(data.month,'10');assert.deepEqual(data.rows.map(c=>c.id),['oct']);
+  t.mock.timers.setTime(Date.UTC(2026,10,1,4));data=await birthdays();assert.equal(data.month,'11');assert.deepEqual(data.rows.map(c=>c.id),['nov']);assert.equal((await birthdays('oct')).total,0);
+  assert.equal((await call('/dispatch',{contact_id:'nov',message_id:'m'},cookie,true)).status,303);assert.equal((await birthdays()).total,0);
+  await call('/return',{id:'nov'},cookie);assert.equal((await birthdays()).total,1);sqlite.close();
+});

@@ -61,3 +61,7 @@ A migração `0005_unique_homepage_visits.sql` adiciona o registro de visitantes
 ## Idade dos hóspedes
 
 A idade aparece junto ao nome quando a data de nascimento é válida. O cálculo é atualizado a cada renderização, considera o aniversário e usa a data de Fortaleza. Datas ausentes, inválidas ou futuras não geram uma idade. A imagem de compartilhamento v2 usa o símbolo em destaque para permanecer legível em miniaturas, com URL própria para evitar reaproveitar o arquivo v1 em cache.
+
+## Aniversariantes do mês
+
+Dentro da Principal, a aba Aniversariantes do mês filtra hóspedes elegíveis para envio cujo nascimento corresponde ao mês atual em Fortaleza. Pendentes, finalizados, inativos, bloqueados e contatos sem telefone não entram nesse filtro. O envio e o retorno à Principal continuam usando o mesmo fluxo; a seleção e a edição individual da mensagem permanecem disponíveis.

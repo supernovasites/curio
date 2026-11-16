@@ -87,13 +87,16 @@ async function api(req, env, path) {
   if(path==='/queue' && method==='GET') {
     const url=new URL(req.url),tab=url.searchParams.get('tab')||'principal',q=clean(url.searchParams.get('q'),100),page=Math.max(1,Math.min(100000,parseInt(url.searchParams.get('page'))||1));
     const groups={principal:"COALESCE(i.status,'nao_contatado')='nao_contatado' AND c.phone<>'' AND c.active=1 AND c.opted_out=0",pendentes:"i.status='aguardando'",finalizados:"i.status IN ('interessado','sem_interesse','sem_resposta','reserva_realizada')",interessados:"i.status='interessado'",reservas:"i.status='reserva_realizada'"};
+    groups.aniversariantes=groups.principal+" AND substr(c.birth_date,6,2)=? AND c.birth_date<=?";
     if(!groups[tab]) fail(400,'Área inválida.');
     const args=[],conditions=[groups[tab]];
+    const calendarParts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(p=>['year','month','day'].includes(p.type)).map(p=>[p.type,p.value]));
+    if(tab==='aniversariantes')args.push(calendarParts.month,`${calendarParts.year}-${calendarParts.month}-${calendarParts.day}`);
     if(q){conditions.push('(c.name LIKE ? OR c.city LIKE ?)');args.push('%'+q+'%','%'+q+'%');}
     const from=latestJoin+' WHERE '+conditions.join(' AND ');
     const total=await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first();
     const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.registered_at,c.occupation,c.birth_date,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.campaign_id,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.registered_at DESC,c.name COLLATE NOCASE,c.id LIMIT 30 OFFSET ?').bind(...args,(page-1)*30).all();
-    return json({rows:rows.results,total:total.total,page,pages:Math.ceil(total.total/30)});
+    return json({rows:rows.results,total:total.total,page,pages:Math.ceil(total.total/30),month:calendarParts.month});
   }
   if(path==='/dispatch' && method==='POST') {
     if(!req.headers.get('content-type')?.includes('application/x-www-form-urlencoded')) fail(415,'Formulário inválido.');
