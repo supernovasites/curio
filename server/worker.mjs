@@ -18,6 +18,7 @@ async function verify(password, hash) {
 function fail(status, message) { throw Object.assign(new Error(message), {status}); }
 const json = (v, status=200, extra={}) => new Response(JSON.stringify(v), {status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...extra}});
 const clean = (s,max=200) => typeof s === 'string' ? s.trim().slice(0,max) : '';
+const dateOnly = value => {const day=clean(value,40).slice(0,10);return /^\d{4}-\d{2}-\d{2}$/.test(day)&&!Number.isNaN(Date.parse(day))&&new Date(day).toISOString().slice(0,10)===day?day:'';};
 async function body(req) {
   if (!req.headers.get('content-type')?.includes('application/json')) fail(415,'Envie JSON.');
   const text = await req.text();
@@ -70,7 +71,7 @@ async function api(req, env, path) {
       const name=clean(row.name,200),phone=normalizePhone(clean(row.phone,30),clean(row.country,50)),city=clean(row.city,100),state=clean(row.state,100);
       if(!name||!Number.isInteger(row.index)||row.index<0) fail(400,'Contato inválido.');
       const id=(await sha(phone?'phone:'+phone:'source:'+row.index)).slice(0,32);
-      statements.push(db.prepare('INSERT INTO contacts(id,name,phone,city,state,active,source_key) VALUES(?,?,?,?,?,?,?) ON CONFLICT(source_key) DO NOTHING').bind(id,name,phone,city,state,row.active?1:0,id));
+      statements.push(db.prepare("INSERT INTO contacts(id,name,phone,city,state,active,source_key,registered_at,occupation,birth_date) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_key) DO UPDATE SET registered_at=excluded.registered_at,occupation=excluded.occupation,birth_date=excluded.birth_date,city=excluded.city,state=excluded.state").bind(id,name,phone,city,state,row.active?1:0,id,dateOnly(row.registered_at),clean(row.occupation,120),dateOnly(row.birth_date)));
     }
     if(statements.length) await db.batch(statements);
     await audit(user.id,'importou_lote',String(b.rows.length));return json({ok:true});
@@ -80,7 +81,7 @@ async function api(req, env, path) {
     return json({ok:true},200,{'Set-Cookie':'curio_session=; Path=/api/campanhas; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});
   }
   // Queue membership is global: choosing another saved message never resets a guest.
-  const latestJoin=" FROM contacts c LEFT JOIN interactions i ON i.rowid=(SELECT x.rowid FROM interactions x WHERE x.contact_id=c.id ORDER BY x.updated_at DESC,x.rowid DESC LIMIT 1) ";
+  const latestJoin=" FROM contacts c LEFT JOIN interactions i ON i.rowid=(SELECT x.rowid FROM interactions x WHERE x.contact_id=c.id ORDER BY (x.status<>'nao_contatado') DESC,x.updated_at DESC,x.rowid DESC LIMIT 1) ";
   if(path==='/summary' && method==='GET') return json(await db.prepare("SELECT COUNT(*) total,SUM(CASE WHEN COALESCE(i.status,'nao_contatado')='nao_contatado' AND c.phone<>'' AND c.active=1 AND c.opted_out=0 THEN 1 ELSE 0 END) principal,SUM(CASE WHEN i.status='aguardando' THEN 1 ELSE 0 END) pendentes,SUM(CASE WHEN i.status IN ('interessado','sem_interesse','sem_resposta') THEN 1 ELSE 0 END) finalizados,SUM(CASE WHEN i.status='interessado' THEN 1 ELSE 0 END) interessados,SUM(CASE WHEN i.status='sem_interesse' THEN 1 ELSE 0 END) sem_interesse,SUM(CASE WHEN i.status='sem_resposta' THEN 1 ELSE 0 END) sem_resposta,SUM(CASE WHEN c.phone='' OR c.active=0 OR c.opted_out=1 THEN 1 ELSE 0 END) indisponiveis"+latestJoin).first());
   if(path==='/queue' && method==='GET') {
     const url=new URL(req.url),tab=url.searchParams.get('tab')||'principal',q=clean(url.searchParams.get('q'),100),page=Math.max(1,Math.min(100000,parseInt(url.searchParams.get('page'))||1));
@@ -90,27 +91,29 @@ async function api(req, env, path) {
     if(q){conditions.push('(c.name LIKE ? OR c.city LIKE ?)');args.push('%'+q+'%','%'+q+'%');}
     const from=latestJoin+' WHERE '+conditions.join(' AND ');
     const total=await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first();
-    const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.campaign_id,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.name COLLATE NOCASE,c.id LIMIT 30 OFFSET ?').bind(...args,(page-1)*30).all();
+    const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.registered_at,c.occupation,c.birth_date,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.campaign_id,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.name COLLATE NOCASE,c.id LIMIT 30 OFFSET ?').bind(...args,(page-1)*30).all();
     return json({rows:rows.results,total:total.total,page,pages:Math.ceil(total.total/30)});
   }
   if(path==='/dispatch' && method==='POST') {
     if(!req.headers.get('content-type')?.includes('application/x-www-form-urlencoded')) fail(415,'Formulário inválido.');
-    const raw=await req.text();if(raw.length>1000)fail(413,'Formulário muito grande.');
+    const raw=await req.text();if(raw.length>50000)fail(413,'Formulário muito grande.');
     const form=new URLSearchParams(raw),id=clean(form.get('contact_id'),80),messageId=clean(form.get('message_id'),80);
     const c=await db.prepare('SELECT id,name,phone,active,opted_out FROM contacts WHERE id=?').bind(id).first();
     const message=await db.prepare('SELECT id,message FROM campaigns WHERE id=?').bind(messageId).first();
     if(!c||!c.phone||!c.active||c.opted_out)fail(400,'Este hóspede não está disponível para envio.');
     if(!message)fail(400,'Selecione uma mensagem salva.');
+    const custom=form.get('custom_message');
+    if(custom!==null&&(!custom.trim()||custom.length>4000))fail(400,'A mensagem deve conter entre 1 e 4.000 caracteres.');
     const result=await db.prepare("INSERT INTO interactions(campaign_id,contact_id,status,sent_at,updated_by) SELECT ?,c.id,'aguardando',CURRENT_TIMESTAMP,? FROM contacts c WHERE c.id=? AND c.active=1 AND c.opted_out=0 AND c.phone<>'' AND NOT EXISTS(SELECT 1 FROM interactions x WHERE x.contact_id=c.id AND x.status<>'nao_contatado') ON CONFLICT(campaign_id,contact_id) DO UPDATE SET status='aguardando',sent_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,updated_by=excluded.updated_by WHERE interactions.status='nao_contatado'").bind(message.id,user.id,c.id).run();
     if(Number(result.meta?.changes??result.changes)!==1)fail(409,'Este hóspede já foi movido para acompanhamento. Atualize a lista.');
     await audit(user.id,'abriu_whatsapp',c.id);
-    const text=message.message.replaceAll('{nome}',c.name.split(/\s+/)[0]);
+    const text=(custom===null?message.message:custom.trim()).replaceAll('{nome}',c.name.split(/\s+/)[0]);
     return new Response(null,{status:303,headers:{Location:'https://wa.me/'+c.phone+'?text='+encodeURIComponent(text),'Cache-Control':'no-store'}});
   }
   if(path==='/outcome' && method==='POST') {
     const b=await body(req);
     if(!['interessado','sem_interesse','sem_resposta'].includes(b.status))fail(400,'Selecione um resultado.');
-    const latest=await db.prepare('SELECT rowid,status FROM interactions WHERE contact_id=? ORDER BY updated_at DESC,rowid DESC LIMIT 1').bind(clean(b.id,80)).first();
+    const latest=await db.prepare("SELECT rowid,status FROM interactions WHERE contact_id=? ORDER BY (status<>'nao_contatado') DESC,updated_at DESC,rowid DESC LIMIT 1").bind(clean(b.id,80)).first();
     if(!latest||latest.status!=='aguardando')fail(409,'Este hóspede não está pendente de retorno. Atualize a lista.');
     const result=await db.prepare("UPDATE interactions SET status=?,notes=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE rowid=? AND status='aguardando'").bind(b.status,clean(b.notes,2000),user.id,latest.rowid).run();
     if(Number(result.meta?.changes??result.changes)!==1)fail(409,'Resultado já atualizado por outra pessoa.');
@@ -118,7 +121,7 @@ async function api(req, env, path) {
   }
   if(path==='/return' && method==='POST') {
     const b=await body(req),id=clean(b.id,80);
-    const latest=await db.prepare('SELECT rowid,status FROM interactions WHERE contact_id=? ORDER BY updated_at DESC,rowid DESC LIMIT 1').bind(id).first();
+    const latest=await db.prepare("SELECT rowid,status FROM interactions WHERE contact_id=? ORDER BY (status<>'nao_contatado') DESC,updated_at DESC,rowid DESC LIMIT 1").bind(id).first();
     if(!latest||latest.status!=='aguardando')fail(409,'Este hóspede não está pendente.');
     await db.prepare("UPDATE interactions SET status='nao_contatado',sent_at=NULL,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE rowid=? AND status='aguardando'").bind(user.id,latest.rowid).run();
     await audit(user.id,'devolveu_principal',id);return json({ok:true});
@@ -153,7 +156,7 @@ async function api(req, env, path) {
     if(status==='bloqueado') conditions.push('c.opted_out=1');
     const from=" FROM contacts c LEFT JOIN interactions i ON c.id=i.contact_id AND i.campaign_id=? WHERE "+conditions.join(' AND ');
     const total=await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first();
-    const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.active,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.name COLLATE NOCASE,c.id LIMIT 40 OFFSET ?').bind(...args,(page-1)*40).all();
+    const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.registered_at,c.occupation,c.birth_date,c.active,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.name COLLATE NOCASE,c.id LIMIT 40 OFFSET ?').bind(...args,(page-1)*40).all();
     return json({rows:rows.results,total:total.total,page,pages:Math.ceil(total.total/40)});
   }
   const contactMatch=path.match(/^\/contacts\/([\w-]+)$/);

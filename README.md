@@ -10,7 +10,7 @@ Homepage existente e plataforma autenticada em `/campanhas`, executadas em Cloud
 - Estados exclusivos: não contatado, aguardando, interessado, sem interesse, sem resposta.
 - Os nomes expandem ao toque. Pendentes recebem um resultado exclusivo e passam para Finalizados. Telefones não são retornados nas listagens nem exibidos no HTML; são usados apenas pelo servidor para redirecionar ao WhatsApp após a ação de enviar. Não há exportação ou cópia de números. O WhatsApp e seu endereço de destino necessariamente recebem o número individual.
 - Administradores podem criar, editar e bloquear usuários; operadores gerenciam campanhas e contatos.
-- Importação administrativa de CSV; somente nome, telefone, cidade, estado e ativo. CPF, RG, endereço, passaporte e nascimento não são importados.
+- Importação administrativa de CSV; nome, telefone, cidade, estado, ativo, data de cadastro, profissão e nascimento. CPF, RG, endereço e passaporte não são importados.
 
 ## Segurança e operação
 
@@ -20,7 +20,7 @@ O banco é a associação D1 `DB` de produção, identificada no wrangler.jsonc.
 
 ## Importação
 
-O administrador importa o CSV na seção “Importar hóspedes”. O processamento descarta os campos desnecessários antes do envio e envia lotes de até 40 registros autenticados. Telefones são normalizados com código do país, repetições do mesmo número são unificadas e formatos inválidos permanecem sem telefone. A importação é idempotente para o mesmo arquivo e preserva bloqueios e histórico; ela não sobrescreve contatos existentes. A validação de formato não confirma que o número possui WhatsApp.
+O administrador importa o CSV na seção “Importar hóspedes”. O processamento descarta os campos desnecessários antes do envio e envia lotes de até 40 registros autenticados. Telefones são normalizados com código do país, repetições do mesmo número são unificadas e formatos inválidos permanecem sem telefone. A importação é idempotente para o mesmo arquivo e preserva bloqueios e histórico; ela atualiza cidade, estado, cadastro, profissão e nascimento, preservando nome, telefone, bloqueios e o andamento dos atendimentos. A validação de formato não confirma que o número possui WhatsApp.
 
 Não publique arquivos de carga ou a senha do administrador no Git. A inicialização usa o schema em `migrations/0001_campanhas.sql`; foi aplicada ao D1 da primeira implantação. Não reaplique a migração inicial em um banco já inicializado. Migrações futuras devem ser novos arquivos, aplicados antes do código que as exige.
 
@@ -36,8 +36,14 @@ O fluxo mais simples para atendimento manual é o [Clique para conversar oficial
 
 ## Menu e painel
 
-O menu compartilhado atende à homepage e às rotas `/campanhas/`, `/painel/`, `/usuarios/` e `/mensagens/`. Painel e Usuários exigem perfil de administrador. `/painel/` usa a mesma sessão da plataforma.
+O menu compartilhado atende às rotas `/campanhas/`, `/painel/`, `/usuarios/` e `/mensagens/`. Painel e Usuários exigem perfil de administrador. `/painel/` usa a mesma sessão da plataforma.
 
 A migração `0002_homepage_metrics.sql` adiciona os contadores diários de visualizações da homepage e cliques nos botões de reserva online e WhatsApp. O fuso é America/Fortaleza. Não há reconstrução de histórico anterior à publicação, identificação de visitante único ou armazenamento de IP nos contadores. Atualizações da página contam como novos acessos. O endpoint público aceita somente três eventos; as estatísticas são acessíveis exclusivamente à administração. Os totais são indicativos e podem incluir bots com JavaScript ou testes.
 
 A prévia local simula a abertura do WhatsApp sem sair do servidor local. Os testes de fluxo não enviam mensagens.
+
+## Fichas e edição antes do envio
+
+Cidade, data de cadastro, profissão e nascimento aparecem junto ao nome. Campos ausentes são identificados como não informados. A migração `0003_contact_details.sql` deve ser aplicada antes de publicar esta versão. Reimportar o CSV original preenche os dados sem reiniciar as filas ou apagar resultados.
+
+Ao expandir um hóspede na principal, a mensagem selecionada aparece preenchida com o primeiro nome e pode ser ajustada apenas para aquele envio. A mensagem padrão salva não é alterada. Em Pendente de retorno, a ação “Voltar à principal para reenviar” permite uma nova tentativa, inclusive escolhendo outra mensagem.
