@@ -57,9 +57,9 @@ async function api(req, env, path) {
     if(user.role!=='admin')fail(403,'Somente administradores podem acessar o painel.');
     const days=Math.min(90,Math.max(1,parseInt(new URL(req.url).searchParams.get('days'))||30));
     const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-    const start=new Date(Date.parse(today+'T00:00:00Z')-(days-1)*86400000).toISOString().slice(0,10);
+    const start=[new Date(Date.parse(today+'T00:00:00Z')-(days-1)*86400000).toISOString().slice(0,10),'2026-11-16'].sort().at(-1);
     const rows=await db.prepare("SELECT day,SUM(CASE WHEN kind='visita' THEN count ELSE 0 END) acessos,SUM(CASE WHEN kind='reserva_online' THEN count ELSE 0 END) reservas,SUM(CASE WHEN kind='whatsapp' THEN count ELSE 0 END) whatsapp FROM homepage_metrics WHERE day>=? AND day<=? GROUP BY day ORDER BY day DESC").bind(start,today).all();
-    return json({rows:rows.results,start,today,days,timezone:'America/Fortaleza'});
+    return json({rows:rows.results,start,today,days:Math.max(1,Math.round((Date.parse(today)-Date.parse(start))/86400000)+1),timezone:'America/Fortaleza'});
   }
   if(path==='/import' && method==='POST') {
     if(user.role!=='admin') fail(403,'Somente administradores podem importar a base.');
