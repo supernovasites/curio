@@ -1,0 +1,10 @@
+PRAGMA foreign_keys = ON;
+CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL COLLATE NOCASE UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','operador')), active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at INTEGER NOT NULL);
+CREATE INDEX sessions_expiry ON sessions(expires_at);
+CREATE TABLE login_limits (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+CREATE TABLE contacts (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', city TEXT NOT NULL DEFAULT '', state TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1, opted_out INTEGER NOT NULL DEFAULT 0, source_key TEXT NOT NULL UNIQUE);
+CREATE INDEX contacts_phone ON contacts(phone);
+CREATE TABLE campaigns (id TEXT PRIMARY KEY, name TEXT NOT NULL, message TEXT NOT NULL, created_by TEXT REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE interactions (campaign_id TEXT NOT NULL REFERENCES campaigns(id), contact_id TEXT NOT NULL REFERENCES contacts(id), status TEXT NOT NULL DEFAULT 'nao_contatado' CHECK(status IN ('nao_contatado','aguardando','interessado','sem_interesse','sem_resposta')), sent_at TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_by TEXT REFERENCES users(id), notes TEXT NOT NULL DEFAULT '', PRIMARY KEY(campaign_id,contact_id));
+CREATE TABLE audit (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT REFERENCES users(id), action TEXT NOT NULL, entity_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);

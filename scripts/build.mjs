@@ -1,0 +1,10 @@
+import { mkdir,copyFile,writeFile } from 'node:fs/promises';
+await mkdir('dist/campanhas',{recursive:true});
+for(const f of ['index.html','logo.jpg','curio-aquarela.jpg']) await copyFile(f,`dist/${f}`);
+for(const f of ['index.html','app.js','style.css','csv.js']) await copyFile(`campanhas/${f}`,`dist/campanhas/${f}`);
+const {readFile}=await import('node:fs/promises');
+const csv=await readFile('campanhas/csv.js','utf8');
+const worker=await readFile('server/worker.mjs','utf8');
+await writeFile('dist/_worker.js',csv.replaceAll('export function','function')+'\n'+worker.replace("import {normalizePhone} from '../campanhas/csv.js';",''));
+await writeFile('dist/_routes.json',JSON.stringify({version:1,include:['/api/*','/campanhas','/campanhas/*'],exclude:[]}));
+console.log('Build concluído em dist. Nenhum dado pessoal ou credencial incluído.');
