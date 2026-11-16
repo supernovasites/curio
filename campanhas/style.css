@@ -21,3 +21,5 @@
 @media(max-width:700px){.list-toolbar{display:block}.list-toolbar>#contact-count{display:block;margin-top:7px;font-size:11px}.pagination #page-label{text-align:center}}
 
 .base-cities{margin-top:28px}.city-table-wrap{max-height:420px;overflow:auto}.city-table-wrap thead{position:sticky;top:0;background:#f6f6ef}.city-table-wrap th:nth-child(n+2),.city-table-wrap td:nth-child(n+2){text-align:right}.city-state{display:block;color:var(--muted);font-size:10px;margin-top:3px}.base-cities .stats-note{margin-bottom:10px}
+
+.send-actions{display:flex;gap:8px}.send-actions>*{flex:1;min-width:0;min-height:44px;padding:9px 8px;font-size:13px}.send-actions .primary{width:auto}
