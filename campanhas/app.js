@@ -1,3 +1,4 @@
+import './password.js';
 import {parseCSV,normalizePhone} from './csv.js';
 import {renderHeader} from './nav.js';
 const $=s=>document.querySelector(s);

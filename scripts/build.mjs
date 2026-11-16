@@ -2,7 +2,7 @@ import { mkdir,copyFile,writeFile } from 'node:fs/promises';
 await mkdir('dist/campanhas',{recursive:true});
 await mkdir('dist/painel',{recursive:true});
 for(const f of ['index.html','logo.jpg','curio-aquarela.jpg']) await copyFile(f,`dist/${f}`);
-for(const f of ['index.html','app.js','style.css','csv.js','nav.js']) await copyFile(`campanhas/${f}`,`dist/campanhas/${f}`);
+for(const f of ['index.html','app.js','style.css','csv.js','nav.js','password.js']) await copyFile(`campanhas/${f}`,`dist/campanhas/${f}`);
 for(const f of ['index.html','app.js'])await copyFile(`painel/${f}`,`dist/painel/${f}`);
 await copyFile('metricas.js','dist/metricas.js');
 const {readFile}=await import('node:fs/promises');

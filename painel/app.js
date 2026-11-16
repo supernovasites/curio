@@ -1,3 +1,4 @@
+import '/campanhas/password.js';
 import {renderHeader} from '/campanhas/nav.js';
 const $=s=>document.querySelector(s);
 async function api(path,options={}){const response=await fetch('/api/campanhas'+path,{credentials:'same-origin',...options,headers:{'Content-Type':'application/json',...options.headers}});const data=await response.json();if(!response.ok)throw Object.assign(Error(data.error||'Não foi possível carregar.'),{status:response.status});return data;}
