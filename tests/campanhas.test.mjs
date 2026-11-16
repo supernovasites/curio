@@ -58,3 +58,11 @@ test('private queues, WhatsApp dispatch, outcomes and admin daily analytics',asy
   const opLogin=await call('/api/campanhas/login','POST',{username:'operador',password:'test-password'});const opCookie=opLogin.headers.get('Set-Cookie').split(';')[0];assert.equal((await call('/api/campanhas/analytics','GET',null,opCookie)).status,403);
   assert.equal((await call('/api/metricas','POST',{kind:'other'})).status,400);sqlite.close();
 });
+test('queues sort newest registrations first and interested is a separate filter',async()=>{
+  const sqlite=new DatabaseSync(':memory:');sqlite.exec(await readFile('migrations/0001_campanhas.sql','utf8'));sqlite.exec(await readFile('migrations/0003_contact_details.sql','utf8'));
+  sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)').run('a','admin','Admin',await hashPassword('test-password'),'admin');
+  sqlite.exec("INSERT INTO contacts(id,name,phone,source_key,registered_at) VALUES('old','Ana','5591999991001','old','2023-01-01'),('new','Zelia','5591999991002','new','2026-11-16'),('empty','Bia','5591999991003','empty',''),('yes','Interessado','5591999991004','yes','2026-10-01'),('no','Sem interesse','5591999991005','no','2026-10-02'); INSERT INTO campaigns(id,name,message) VALUES('m','Mensagem','Olá'); INSERT INTO interactions(campaign_id,contact_id,status) VALUES('m','yes','interessado'),('m','no','sem_interesse');");
+  const env={DB:adapter(sqlite)};const login=await worker.fetch(new Request('https://curio.test/api/campanhas/login',{method:'POST',headers:{Origin:'https://curio.test','Content-Type':'application/json'},body:JSON.stringify({username:'admin',password:'test-password'})}),env);const cookie=login.headers.get('Set-Cookie').split(';')[0];
+  const queue=async tab=>await (await worker.fetch(new Request('https://curio.test/api/campanhas/queue?tab='+tab,{headers:{Cookie:cookie}}),env)).json();
+  assert.deepEqual((await queue('principal')).rows.map(c=>c.id),['new','old','empty']);assert.deepEqual((await queue('finalizados')).rows.map(c=>c.id),['no','yes']);assert.deepEqual((await queue('interessados')).rows.map(c=>c.id),['yes']);sqlite.close();
+});
