@@ -140,10 +140,12 @@ async function api(req, env, path) {
     const b=await body(req);
     if(!['interessado','sem_interesse','sem_resposta','reserva_realizada'].includes(b.status))fail(400,'Selecione um resultado.');
     const latest=await db.prepare("SELECT rowid,status FROM interactions WHERE contact_id=? ORDER BY (status<>'nao_contatado') DESC,updated_at DESC,rowid DESC LIMIT 1").bind(clean(b.id,80)).first();
-    if(!latest||latest.status!=='aguardando')fail(409,'Este hóspede não está pendente de retorno. Atualize a lista.');
-    const result=await db.prepare("UPDATE interactions SET status=?,notes=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE rowid=? AND status='aguardando'").bind(b.status,clean(b.notes,2000),user.id,latest.rowid).run();
+    const reservationFromInterest=b.status==='reserva_realizada'&&latest?.status==='interessado';
+    if(!latest||(latest.status!=='aguardando'&&!reservationFromInterest))fail(409,'Este hóspede não está pendente de retorno ou não está na etapa de interesse. Atualize a lista.');
+    const expectedStatus=reservationFromInterest?'interessado':'aguardando';
+    const result=await db.prepare("UPDATE interactions SET status=?,notes=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE rowid=? AND status=?").bind(b.status,clean(b.notes,2000),user.id,latest.rowid,expectedStatus).run();
     if(Number(result.meta?.changes??result.changes)!==1)fail(409,'Resultado já atualizado por outra pessoa.');
-    await audit(user.id,'finalizou_atendimento',clean(b.id,80));return json({ok:true});
+    await audit(user.id,reservationFromInterest?'marcou_reserva_realizada':'registrou_resultado',clean(b.id,80));return json({ok:true});
   }
   if(path==='/return' && method==='POST') {
     const b=await body(req),id=clean(b.id,80);
