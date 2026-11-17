@@ -96,16 +96,20 @@ async function api(req, env, path) {
   }
   // Queue membership is global: choosing another saved message never resets a guest.
   const latestJoin=" FROM contacts c LEFT JOIN interactions i ON i.rowid=(SELECT x.rowid FROM interactions x WHERE x.contact_id=c.id ORDER BY (x.status<>'nao_contatado') DESC,x.updated_at DESC,x.rowid DESC LIMIT 1) ";
-  if(path==='/summary' && method==='GET') return json(await db.prepare("SELECT COUNT(*) total,SUM(CASE WHEN COALESCE(i.status,'nao_contatado')='nao_contatado' AND c.phone<>'' AND c.active=1 AND c.opted_out=0 THEN 1 ELSE 0 END) principal,SUM(CASE WHEN i.status='aguardando' THEN 1 ELSE 0 END) pendentes,SUM(CASE WHEN i.status='interessado' THEN 1 ELSE 0 END) interessados,SUM(CASE WHEN i.status='reserva_realizada' THEN 1 ELSE 0 END) reservas,SUM(CASE WHEN i.status='sem_interesse' THEN 1 ELSE 0 END) sem_interesse,SUM(CASE WHEN i.status='sem_resposta' THEN 1 ELSE 0 END) sem_resposta,SUM(CASE WHEN c.phone='' OR c.active=0 OR c.opted_out=1 THEN 1 ELSE 0 END) indisponiveis"+latestJoin).first());
+  if(path==='/summary' && method==='GET') {
+    const summary=await db.prepare("SELECT COUNT(*) total,SUM(CASE WHEN COALESCE(i.status,'nao_contatado')='nao_contatado' AND c.phone<>'' AND c.active=1 AND c.opted_out=0 THEN 1 ELSE 0 END) principal,SUM(CASE WHEN i.status='aguardando' THEN 1 ELSE 0 END) pendentes,SUM(CASE WHEN i.status='interessado' THEN 1 ELSE 0 END) interessados,SUM(CASE WHEN i.status='reserva_realizada' THEN 1 ELSE 0 END) reservas,SUM(CASE WHEN i.status='sem_interesse' THEN 1 ELSE 0 END) sem_interesse,SUM(CASE WHEN i.status='sem_resposta' THEN 1 ELSE 0 END) sem_resposta,SUM(CASE WHEN c.phone='' OR c.active=0 OR c.opted_out=1 THEN 1 ELSE 0 END) indisponiveis"+latestJoin).first();
+    const years=await db.prepare("SELECT DISTINCT substr(registered_at,1,4) year FROM contacts WHERE length(registered_at)>=4 AND substr(registered_at,1,4) GLOB '[0-9][0-9][0-9][0-9]' ORDER BY year DESC").all();
+    return json({...summary,registration_years:years.results.map(row=>row.year)});
+  }
   if(path==='/queue' && method==='GET') {
-    const url=new URL(req.url),tab=url.searchParams.get('tab')||'principal',q=clean(url.searchParams.get('q'),100),requestedPage=Math.max(1,Math.min(100000,parseInt(url.searchParams.get('page'))||1));
-    const groups={principal:"COALESCE(i.status,'nao_contatado')='nao_contatado' AND c.phone<>'' AND c.active=1 AND c.opted_out=0",pendentes:"i.status='aguardando'",interessados:"i.status='interessado'",sem_interesse:"i.status='sem_interesse'",reservas:"i.status='reserva_realizada'"};
+    const url=new URL(req.url),tab=url.searchParams.get('tab')||'principal',q=clean(url.searchParams.get('q'),100),year=clean(url.searchParams.get('year'),4),requestedPage=Math.max(1,Math.min(100000,parseInt(url.searchParams.get('page'))||1));
+    const groups={principal:"COALESCE(i.status,'nao_contatado')='nao_contatado' AND c.phone<>'' AND c.active=1 AND c.opted_out=0",pendentes:"i.status='aguardando'",interessados:"i.status='interessado'",sem_interesse:"i.status='sem_interesse'",sem_resposta:"i.status='sem_resposta'",reservas:"i.status='reserva_realizada'"};
     groups.aniversariantes=groups.principal+" AND substr(c.birth_date,6,2)=? AND c.birth_date<=?";
     if(!groups[tab]) fail(400,'Área inválida.');
     const args=[],conditions=[groups[tab]];
     const calendarParts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(p=>['year','month','day'].includes(p.type)).map(p=>[p.type,p.value]));
     if(tab==='aniversariantes')args.push(calendarParts.month,`${calendarParts.year}-${calendarParts.month}-${calendarParts.day}`);
-    if(q){conditions.push('(c.name LIKE ? OR c.city LIKE ?)');args.push('%'+q+'%','%'+q+'%');}
+    if(q){conditions.push('(c.name LIKE ? OR c.city LIKE ?)');args.push('%'+q+'%','%'+q+'%');}if(year){if(!/^\\d{4}$/.test(year))fail(400,'Selecione um ano de cadastro válido.');conditions.push('substr(c.registered_at,1,4)=?');args.push(year);}
     const from=latestJoin+' WHERE '+conditions.join(' AND ');
     const total=await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first();
     const pageSize=10,pages=Math.ceil(total.total/pageSize),page=Math.min(requestedPage,Math.max(1,pages));
