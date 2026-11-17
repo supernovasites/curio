@@ -5,7 +5,7 @@ Homepage existente e plataforma autenticada em `/campanhas`, executadas em Cloud
 ## Funcionalidades
 
 - Mensagens reutilizáveis em `/mensagens/`, com a variável `{nome}`.
-- Fila global: Principal, Pendentes, Demonstrou interesse, Sem interesse e Reservas realizadas. Trocar a mensagem não reinicia o acompanhamento.
+- Fila global: Principal, Pendentes, Demonstrou interesse, Sem interesse, Não respondeu e Reservas realizadas. Trocar a mensagem não reinicia o acompanhamento.
 - O servidor abre o WhatsApp e move o hóspede para pendente. Isso registra a abertura da conversa, não comprova o envio nem detecta respostas. O envio é feito no WhatsApp. Se não enviar, a equipe pode devolver o hóspede à principal.
 - Estados exclusivos: não contatado, aguardando, interessado, sem interesse, sem resposta e reserva realizada.
 - Os nomes expandem ao toque. Pendentes recebem um resultado exclusivo e passam para o estado selecionado. Telefones não são retornados nas listagens nem exibidos no HTML; são usados apenas pelo servidor para redirecionar ao WhatsApp após a ação de enviar. Não há exportação ou cópia de números. O WhatsApp e seu endereço de destino necessariamente recebem o número individual.
@@ -50,7 +50,7 @@ Ao expandir um hóspede na principal, a mensagem selecionada aparece preenchida 
 
 ## Filtros e reservas
 
-Os quadros Principal, Pendentes, Demonstrou interesse, Sem interesse e Reservas realizadas filtram a listagem. A ordenação considera a data de cadastro, da mais recente à mais antiga; cadastros sem data ficam no fim. A opção Reserva realizada na lista Demonstrou interesse move o hóspede para o quadro Reservas realizadas. A migração `0004_reserva_realizada.sql` amplia a validação de estados copiando todo o histórico, incluindo os rowids, para a nova definição antes de substituir a tabela.
+Os quadros Principal, Pendentes, Demonstrou interesse, Sem interesse, Não respondeu e Reservas realizadas filtram a listagem. A lista também pode ser filtrada pelo ano de cadastro. A ordenação considera a data de cadastro, da mais recente à mais antiga; cadastros sem data ficam no fim. A opção Reserva realizada na lista Demonstrou interesse move o hóspede para o quadro Reservas realizadas. A migração `0004_reserva_realizada.sql` amplia a validação de estados copiando todo o histórico, incluindo os rowids, para a nova definição antes de substituir a tabela.
 
 ## Compartilhamento e painel
 
