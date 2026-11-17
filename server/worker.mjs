@@ -109,7 +109,7 @@ async function api(req, env, path) {
     const args=[],conditions=[groups[tab]];
     const calendarParts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(p=>['year','month','day'].includes(p.type)).map(p=>[p.type,p.value]));
     if(tab==='aniversariantes')args.push(calendarParts.month,`${calendarParts.year}-${calendarParts.month}-${calendarParts.day}`);
-    if(q){conditions.push('(c.name LIKE ? OR c.city LIKE ?)');args.push('%'+q+'%','%'+q+'%');}if(year){if(!/^\\d{4}$/.test(year))fail(400,'Selecione um ano de cadastro válido.');conditions.push('substr(c.registered_at,1,4)=?');args.push(year);}
+    if(q){conditions.push('(c.name LIKE ? OR c.city LIKE ?)');args.push('%'+q+'%','%'+q+'%');}if(year){if(!/^\d{4}$/.test(year))fail(400,'Selecione um ano de cadastro válido.');conditions.push('substr(c.registered_at,1,4)=?');args.push(year);}
     const from=latestJoin+' WHERE '+conditions.join(' AND ');
     const total=await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first();
     const pageSize=10,pages=Math.ceil(total.total/pageSize),page=Math.min(requestedPage,Math.max(1,pages));
