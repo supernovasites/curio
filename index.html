@@ -91,9 +91,25 @@ html{scroll-behavior:smooth;scroll-padding-top:25px}.screen{min-height:0;padding
 @media(max-width:350px){.cover h1{font-size:22px}.home-hero{min-height:210px}.curio-letter-dates strong{font-size:14px}}
 @media(prefers-reduced-motion:reduce){.curio-story-card{transition:none}}
 
+
+/* A full, legible opening; the hotel films start on the next screen. */
+.cover{min-height:100svh;display:flex;flex-direction:column;overflow:hidden;background:#fcfaf5;z-index:1}.home-header{flex-shrink:0}.home-hero{flex:1;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:24px;align-items:center;align-content:center;min-height:0;padding:28px 48px;isolation:auto;overflow:hidden}.home-hero:before{display:none}
+.home-copy{position:relative;width:100%;max-width:430px;margin:0;z-index:1;padding:0;background:#fcfaf5}.home-copy .eyebrow{font-size:10px;letter-spacing:.18em;color:#7a704f}.cover h1{font-size:clamp(35px,4vw,51px);line-height:1.18;letter-spacing:-.025em;margin:14px 0 18px;color:#244735}.cover .home-copy p{font:16px/1.7 Arial,sans-serif;color:#4b5d4c;max-width:350px;margin:0}
+.home-art{position:relative;inset:auto;display:block;z-index:0;width:100%;height:clamp(320px,65svh,600px);max-width:100%;min-height:0;object-fit:contain;object-position:center;opacity:1;margin:0;mask-image:linear-gradient(180deg,#000 0%,#000 93%,transparent 100%);mix-blend-mode:multiply}
+.curio-scroll-cue{display:flex;flex-shrink:0;align-items:center;justify-content:center;gap:9px;min-height:44px;padding:12px 20px;color:#64725d;font:10px/1.4 Arial,sans-serif;letter-spacing:.12em}.curio-scroll-cue svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5}
+.curio-presentation{position:relative;z-index:1;min-height:100svh;display:flex;align-items:center;justify-content:center;background:#fcfaf5;border-top:1px solid #d9ddce;padding:48px 40px}.curio-stories{width:100%}.curio-story-description{padding:0 12px;margin-bottom:24px;background:#fcfaf5}.curio-story-description h2{font-size:36px;color:#244735}.curio-story-description p{font-size:16px;line-height:1.7;color:#4b5d4c}.curio-story-description>span{color:#7b7355}
+.curio-stay-section{padding:52px 40px;background:#edf1e9}.curio-stay-card{max-width:840px;margin:0 auto;padding:38px 44px;background:#fffef9;border:1px solid #dce1d3;border-radius:16px;box-shadow:0 8px 28px #25493708;color:#294734}.curio-stay-heading>span{font:600 10px/1.5 Arial,sans-serif;letter-spacing:.18em;color:#7d8069}.curio-stay-heading h2{font:400 35px/1.2 Georgia,serif;letter-spacing:-.025em;color:#244735;margin:10px 0 14px}.curio-stay-heading p{font:16px/1.7 Arial,sans-serif;color:#4b5d4c;margin:0}.curio-stay-heading strong{font-weight:500}
+.curio-stay-dates{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:27px 0}.curio-stay-dates>div{padding:20px 22px;border:1px solid #d8e1d0;border-radius:10px;background:#f3f6ee}.curio-stay-dates dt{font:500 13px/1.5 Arial,sans-serif;color:#5c6b55;margin-bottom:6px}.curio-stay-dates dd{font:600 22px/1.4 Arial,sans-serif;color:#244735;margin:0}
+.curio-stay-card h3{font:600 17px/1.5 Arial,sans-serif;margin:25px 0 15px;color:#294734}.curio-stay-includes{display:grid;grid-template-columns:1fr 1fr;gap:17px 25px;list-style:none;padding:0;margin:0 0 29px}.curio-stay-includes li{display:flex;align-items:center;gap:12px;min-width:0;font:16px/1.6 Arial,sans-serif;color:#3f523f}.curio-stay-includes svg{flex:0 0 24px;width:24px;height:24px;fill:none;stroke:#67805c;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.curio-stay-reserve{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:13px 23px;border-radius:7px;background:#2d573e;color:#fff;font:600 15px/1.5 Arial,sans-serif}.curio-stay-reserve:hover{background:#3b684c}.curio-stay-reserve svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+@media(max-width:800px){.home-hero{grid-template-columns:1fr;gap:14px;padding:20px 24px 8px;align-content:center;text-align:center}.home-copy{width:100%;max-width:430px;margin:auto;background:#fcfaf5}.home-copy .eyebrow{font-size:9px;letter-spacing:.16em}.cover h1{font-size:33px;line-height:1.19;max-width:390px;margin:11px auto 14px}.cover .home-copy p{font-size:15px;line-height:1.7;max-width:330px;margin:auto}.home-art{position:relative;inset:auto;width:100%;height:clamp(220px,38svh,350px);margin:0;object-fit:contain;object-position:center;mask-image:linear-gradient(180deg,#000 0%,#000 90%,transparent 100%);z-index:0}.curio-presentation{padding:38px 24px}.curio-story-description h2{font-size:31px}.curio-story-description p{font-size:15px;line-height:1.7}.curio-stay-section{padding:35px 24px}.curio-stay-card{padding:30px}.curio-stay-heading h2{font-size:31px}}
+@media(max-width:480px){.home-hero{min-height:0;padding:18px 20px 5px;gap:15px}.home-copy{width:100%;max-width:360px}.cover h1{font-size:31px;line-height:1.2;max-width:335px;margin:11px auto 14px}.cover .home-copy p{font-size:15px;max-width:300px;line-height:1.7}.home-copy .eyebrow{font-size:9px}.home-art{height:clamp(215px,37svh,335px)}.curio-scroll-cue{min-height:40px;font-size:9px;padding:9px 16px}.curio-presentation{padding:32px 18px}.curio-story-description{padding:0 7px;margin-bottom:20px}.curio-story-description h2{font-size:30px;line-height:1.2;margin:9px 0 12px}.curio-story-description p{font-size:15px;line-height:1.65;max-width:315px}.curio-story-description>span{font-size:9px}.curio-stay-section{padding:28px 16px}.curio-stay-card{padding:27px 23px;border-radius:13px}.curio-stay-heading>span{font-size:9px}.curio-stay-heading h2{font-size:30px;line-height:1.2;margin-bottom:15px}.curio-stay-heading p{font-size:15px;line-height:1.75}.curio-stay-dates{gap:10px;margin:23px 0}.curio-stay-dates>div{padding:16px 13px}.curio-stay-dates dt{font-size:12px}.curio-stay-dates dd{font-size:18px;line-height:1.5}.curio-stay-card h3{font-size:17px;margin:23px 0 18px}.curio-stay-includes{grid-template-columns:1fr;gap:17px;margin-bottom:26px}.curio-stay-includes li{font-size:15px;line-height:1.7}.curio-stay-reserve{width:100%;padding:13px 11px;font-size:14px;min-height:52px}}
+@media(max-width:350px){.cover h1{font-size:28px}.cover .home-copy p{font-size:14px}.curio-stay-card{padding:25px 20px}.curio-stay-dates dd{font-size:16px}.curio-stay-heading h2{font-size:28px}}
+
 </style><script type="module" src="/metricas.js?v=20261116-3"></script></head><body><main class="shell"><section class="screen cover" id="capa" aria-label="Boas-vindas ao Hotel Fazenda Curió">
 <header class="home-header"><a href="#capa" class="home-brand" aria-label="Hotel Fazenda Curió — início"><img class="logo" src="logo.jpg" alt=""><span>Fazenda Curió<small>HOTEL FAZENDA</small></span></a></header>
 <div class="home-hero"><div class="home-copy"><span class="eyebrow">SINTA-SE EM CASA</span><h1>Sua casa de campo<br><em>pertinho de Belém</em></h1><p>Natureza, conforto e boa gastronomia.</p></div><img class="home-art" src="curio-aquarela.jpg" alt="Aquarela da Casa da Árvore do Curió, cercada de folhagens e bougainvílias rosas, magenta e brancas"></div>
+<div class="curio-scroll-cue">Role para conhecer<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M6 14l6 6 6-6"/></svg></div>
 </section>
 <section class="curio-presentation" id="conheca-o-curio" aria-labelledby="curio-presentation-title">
   <div class="curio-stories" data-curio-stories tabindex="0" role="region" aria-roledescription="carrossel" aria-label="Apresentação do Hotel Fazenda Curió">
@@ -111,14 +127,22 @@ html{scroll-behavior:smooth;scroll-padding-top:25px}.screen{min-height:0;padding
     <p class="curio-story-status" role="status" aria-live="polite"></p>
   </div>
 </section>
-<section class="curio-letter-section" aria-labelledby="curio-letter-title"><article class="curio-letter">
-  <span class="curio-letter-eyebrow">UM CONVITE DA NOSSA ANFITRIÃ</span><h2 id="curio-letter-title">Seu fim de semana,<br><em>com carinho.</em></h2>
-  <div class="curio-letter-copy"><p class="curio-letter-greeting">Olá! Será um prazer receber você.</p><p>Nosso <strong>pacote de fim de semana inclui duas diárias</strong>, de sexta a domingo.</p>
-    <div class="curio-letter-dates"><div><span>ENTRADA</span><strong>Sexta-feira, às 15h</strong></div><span aria-hidden="true">✧</span><div><span>SAÍDA</span><strong>Domingo, às 15h</strong></div></div>
-    <p>Estão incluídos <strong>café da manhã, almoço, lanche da tarde, jantar e lazer.</strong></p><p>Fale conosco pelo WhatsApp para tirar dúvidas, consultar datas, receber seu orçamento e fazer sua reserva.</p>
+<section class="curio-stay-section" aria-labelledby="curio-stay-title">
+  <div class="curio-stay-card">
+    <header class="curio-stay-heading"><span>HOSPEDAGEM</span><h2 id="curio-stay-title">Seu fim de semana no Curió</h2><p>Trabalhamos com <strong>pacotes de fim de semana (2 diárias).</strong></p></header>
+    <dl class="curio-stay-dates"><div><dt>Entrada</dt><dd>sexta, às 15h</dd></div><div><dt>Saída</dt><dd>domingo, às 15h</dd></div></dl>
+    <h3>Inclui pensão completa:</h3>
+    <ul class="curio-stay-includes">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5ZM16 10h2a3 3 0 0 1 0 6h-2M3 22h16M7 3v3M11 2v4M15 3v3"/></svg><span>Café da manhã</span></li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2v7a3 3 0 0 0 6 0V2M7 2v20M18 2c-3 3-4 7-4 11h5M19 2v20"/></svg><span>Almoço e jantar</span></li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v10H4ZM4 16c3-3 5 3 8 0s5 3 8 0M3 21h18M6 11V8h12v3M12 8V5M12 2c-2 2-2 3 0 3s2-1 0-3Z"/></svg><span>Lanche da tarde</span></li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3C8 1 2 7 5 15c8 3 14-3 14-12ZM3 21L16 8M8 16l1-6M8 16l6-1"/></svg><span>Acesso ao lazer da fazenda</span></li>
+    </ul>
+    <a class="curio-stay-reserve" href="https://wa.me/5591991400045?text=Ol%C3%A1%2C%20Carla!%20Gostaria%20de%20saber%20as%20disponibilidades%20e%20receber%20um%20or%C3%A7amento%20para%20meu%20fim%20de%20semana%20no%20Curi%C3%B3." target="_blank" rel="noopener"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11.7a8 8 0 0 1-11.8 7L4 20l1.3-4.2A8 8 0 1 1 20 11.7Z"/><path d="M9 7.5c-.7 0-1 1.2-.6 2.2.9 2.5 2.4 4.1 4.9 5 .9.3 2.2-.1 2.2-.8l-2-1.2-.9.7a7 7 0 0 1-2.8-2.8l.7-.9Z"/></svg><span>Reserve pelo WhatsApp</span></a>
   </div>
-  <footer class="curio-letter-signoff"><span>Com carinho,</span><p class="curio-letter-signature">Carla Teixeira</p><a class="curio-letter-contact" href="https://wa.me/5591991400045?text=Ol%C3%A1%2C%20Carla!%20Gostaria%20de%20saber%20as%20disponibilidades%20e%20receber%20um%20or%C3%A7amento%20para%20meu%20fim%20de%20semana%20no%20Curi%C3%B3." target="_blank" rel="noopener"><svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 11.7a8 8 0 0 1-11.8 7L4 20l1.3-4.2A8 8 0 1 1 20 11.7Z"/><path d="M9 7.5c-.7 0-1 1.2-.6 2.2.9 2.5 2.4 4.1 4.9 5 .9.3 2.2-.1 2.2-.8l-2-1.2-.9.7a7 7 0 0 1-2.8-2.8l.7-.9Z"/></svg><span>(91) 99140-0045<small>Reserve pelo WhatsApp</small></span><span aria-hidden="true">↗</span></a><small class="curio-letter-hotel">Hotel Fazenda Curió · Esperamos você!</small></footer>
-</article></section>
+</section>
+
+
 
 
 
@@ -143,7 +167,7 @@ html{scroll-behavior:smooth;scroll-padding-top:25px}.screen{min-height:0;padding
  root.addEventListener('keydown',event=>{if(event.key==='ArrowRight'||event.key==='ArrowLeft'){event.preventDefault();select(current+(event.key==='ArrowRight'?1:-1),true)}else if(event.key===' '&&event.target===root){event.preventDefault();toggle()}});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)visibilityPause();else if(inView&&!userPaused)play()});
  show();
- if('IntersectionObserver'in window)new IntersectionObserver(entries=>{const e=entries[0];inView=e.isIntersecting&&e.intersectionRatio>=.2;if(inView&&!document.hidden&&!userPaused)play();else if(!inView)visibilityPause()},{threshold:[0,.2,.6]}).observe(stage);else{inView=true;play()}
+ if('IntersectionObserver'in window)new IntersectionObserver(entries=>{const e=entries[0];inView=e.isIntersecting&&e.intersectionRatio>=.4;if(inView&&!document.hidden&&!userPaused)play();else if(!inView)visibilityPause()},{threshold:[0,.4,.7]}).observe(stage);else{inView=true;play()}
 })();
 
 </script></body></html>
