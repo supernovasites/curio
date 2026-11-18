@@ -114,6 +114,7 @@ html{scroll-behavior:smooth;scroll-padding-top:25px}.screen{min-height:0;padding
 @media(max-width:480px){.curio-intro{background-size:auto 560px;background-position:center 76px}.home-hero{min-height:360px;padding:24px 20px 145px}.home-copy{max-width:345px;padding:12px 5px}.cover h1{font-size:31px;max-width:330px;line-height:1.2}.cover .home-copy p{font-size:14px;max-width:290px}.home-copy:before{inset:-25px -27px}.curio-presentation{margin-top:-95px;padding:0 16px 28px}.curio-story-description{padding:21px 12px 9px}.curio-story-description h2{font-size:28px}.curio-story-description p{font-size:14px;max-width:300px}}
 .cover{align-items:stretch}.home-header{align-self:stretch;text-align:left}.home-brand{color:#244735}
 
+.curio-host-signature{font:italic 35px/1.4 "Segoe Script","Brush Script MT",cursive;color:#3c6147;margin:20px 0 18px;letter-spacing:-1px}@media(max-width:480px){.curio-host-signature{font-size:31px;margin:18px 0;text-align:center}}
 </style><script type="module" src="/metricas.js?v=20261116-3"></script></head><body><main class="shell"><div class="curio-intro"><section class="screen cover" id="capa" aria-label="Boas-vindas ao Hotel Fazenda Curió">
 <header class="home-header"><a href="#capa" class="home-brand" aria-label="Hotel Fazenda Curió — início"><img class="logo" src="logo.jpg" alt=""><span>Fazenda Curió<small>HOTEL FAZENDA</small></span></a></header>
 <div class="home-hero"><div class="home-copy"><span class="eyebrow">SINTA-SE EM CASA</span><h1>Sua casa de campo<br><em>pertinho de Belém</em></h1><p>Natureza, conforto e boa gastronomia.</p></div><img class="home-art" src="curio-aquarela.jpg" alt="Aquarela da Casa da Árvore do Curió, cercada de folhagens e bougainvílias rosas, magenta e brancas"></div>
@@ -131,7 +132,7 @@ html{scroll-behavior:smooth;scroll-padding-top:25px}.screen{min-height:0;padding
       <button type="button" class="curio-video-pause" data-story-pause aria-label="Pausar vídeo"><span aria-hidden="true"></span></button>
     </div>
     <button class="curio-video-retry" type="button" hidden>Toque para assistir</button>
-    <header class="curio-story-description" aria-live="polite" aria-atomic="true"><span>CONHEÇA O CURIÓ</span><h2 id="curio-presentation-title" data-story-title>Nossos quartos</h2><p data-story-description>Conforto e acolhimento para o seu descanso.</p></header>
+    <header class="curio-story-description" aria-live="polite" aria-atomic="true"><span>CONHEÇA O CURIÓ</span><h2 id="curio-presentation-title" data-story-title>Nossos quartos</h2><p data-story-description>Quartos acolhedores, com detalhes rústicos e uma decoração cheia de personalidade. Um espaço para descansar e aproveitar o ritmo tranquilo da fazenda.</p></header>
     <p class="curio-story-status" role="status" aria-live="polite"></p>
   </div>
 </section>
@@ -147,6 +148,7 @@ html{scroll-behavior:smooth;scroll-padding-top:25px}.screen{min-height:0;padding
       <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v10H4ZM4 16c3-3 5 3 8 0s5 3 8 0M3 21h18M6 11V8h12v3M12 8V5M12 2c-2 2-2 3 0 3s2-1 0-3Z"/></svg><span>Lanche da tarde</span></li>
       <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3C8 1 2 7 5 15c8 3 14-3 14-12ZM3 21L16 8M8 16l1-6M8 16l6-1"/></svg><span>Acesso ao lazer da fazenda</span></li>
     </ul>
+    <p class="curio-host-signature">Carla Teixeira</p>
     <a class="curio-stay-reserve" href="https://wa.me/5591991400045?text=Ol%C3%A1%2C%20Carla!%20Gostaria%20de%20saber%20as%20disponibilidades%20e%20receber%20um%20or%C3%A7amento%20para%20meu%20fim%20de%20semana%20no%20Curi%C3%B3." target="_blank" rel="noopener"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11.7a8 8 0 0 1-11.8 7L4 20l1.3-4.2A8 8 0 1 1 20 11.7Z"/><path d="M9 7.5c-.7 0-1 1.2-.6 2.2.9 2.5 2.4 4.1 4.9 5 .9.3 2.2-.1 2.2-.8l-2-1.2-.9.7a7 7 0 0 1-2.8-2.8l.7-.9Z"/></svg><span>Reserve pelo WhatsApp</span></a>
   </div>
 </section>
@@ -159,8 +161,8 @@ html{scroll-behavior:smooth;scroll-padding-top:25px}.screen{min-height:0;padding
 (()=>{
  const root=document.querySelector('[data-curio-stories]');if(!root)return;
  const cards=[...root.querySelectorAll('[data-story]')],placeholders=cards.map(c=>c.querySelector('video')),sources=placeholders.map(v=>({src:v.dataset.src,poster:v.poster,label:v.getAttribute('aria-label')})),player=placeholders[0],stage=root.querySelector('.curio-story-stage'),actions=root.querySelector('[data-video-actions]'),sound=root.querySelector('[data-story-sound]'),pause=root.querySelector('[data-story-pause]'),retry=root.querySelector('.curio-video-retry'),status=root.querySelector('.curio-story-status'),ambient=document.getElementById('ambient-music');
- const texts=[{title:'Nossos quartos',description:'Conforto e acolhimento para o seu descanso.'},{title:'Um cantinho de paz',description:'Silêncio e serenidade em meio à natureza.'},{title:'A Casa da Árvore',description:'O encanto de estar entre flores e árvores.'}];
- let current=0,inView=false,userPaused=false,muted=false,attempt=0,pointer=null,ambientWasPlaying=false;
+ const texts=[{title:'Nossos quartos',description:'Quartos acolhedores, com detalhes rústicos e uma decoração cheia de personalidade. Um espaço para descansar e aproveitar o ritmo tranquilo da fazenda.'},{title:'Um cantinho de paz',description:'Cercada de verde, nossa capela é um convite à pausa. Um cantinho para fazer uma oração, contemplar os detalhes e encontrar tranquilidade em meio à natureza.'},{title:'A Casa da Árvore',description:'Entre flores e árvores, a construção de madeira e sua varanda se integram à paisagem. Conheça de perto um dos cenários mais encantadores do Curió e aprecie a fazenda de outro ângulo.'}];
+ let current=0,inView=false,userPaused=false,muted=false,attempt=0,pointer=null,ambientWasPlaying=false,userMuted=false;
  placeholders.forEach((v,i)=>{const image=document.createElement('img');image.src=sources[i].poster;image.alt='';image.className='curio-story-poster';cards[i].prepend(image);if(i)v.remove()});
  function sync(){sound.dataset.muted=String(muted);sound.setAttribute('aria-label',muted?'Ativar som do vídeo':'Desativar som do vídeo');sound.setAttribute('aria-pressed',String(!muted));sound.querySelector('[data-sound-label]').hidden=!muted;pause.dataset.paused=String(player.paused);pause.setAttribute('aria-label',player.paused?'Reproduzir vídeo':'Pausar vídeo')}
  function show(){const text=texts[current];root.querySelector('[data-story-title]').textContent=text.title;root.querySelector('[data-story-description]').textContent=text.description;cards.forEach((card,i)=>{card.classList.toggle('is-current',i===current);card.classList.toggle('is-before',i===(current+2)%3);card.classList.toggle('is-after',i===(current+1)%3);card.querySelector('.curio-story-peek').hidden=i===current});cards[current].append(actions,retry);sync()}
@@ -169,11 +171,13 @@ html{scroll-behavior:smooth;scroll-padding-top:25px}.screen{min-height:0;padding
  function select(index,manual=false){attempt++;player.pause();current=(index+3)%3;if(manual)userPaused=false;prepare();retry.hidden=true;show();if(inView&&!document.hidden&&!userPaused)play()}
  function toggle(){if(player.paused){userPaused=false;play()}else{userPaused=true;attempt++;player.pause();retry.hidden=true;sync()}}
  function visibilityPause(){attempt++;player.pause();sync();if(ambientWasPlaying&&!inView&&!document.hidden){ambient.play().catch(()=>{});ambientWasPlaying=false}}
- sound.addEventListener('click',()=>{muted=!muted;player.muted=muted;if(player.paused&&!userPaused)play();sync()});pause.addEventListener('click',toggle);retry.addEventListener('click',()=>{userPaused=false;play()});
+ sound.addEventListener('click',()=>{muted=!muted;userMuted=muted;player.muted=muted;if(player.paused&&!userPaused)play();sync()});pause.addEventListener('click',toggle);retry.addEventListener('click',()=>{userPaused=false;play()});
  cards.forEach((card,i)=>card.querySelector('.curio-story-peek').addEventListener('click',()=>select(i,true)));
  player.addEventListener('play',()=>{if(!inView||document.hidden){player.pause();return}if(ambient&&!ambient.paused){ambientWasPlaying=true;ambient.pause()}retry.hidden=true;sync()});player.addEventListener('pause',sync);player.addEventListener('ended',()=>{if(inView&&!document.hidden&&!userPaused)select(current+1)});player.addEventListener('error',()=>{retry.hidden=false;status.textContent='Não foi possível carregar este vídeo. Deslize para ver o próximo.';sync()});
  stage.addEventListener('pointerdown',event=>{if(event.target.closest('button'))return;pointer={x:event.clientX,y:event.clientY,id:event.pointerId}});stage.addEventListener('pointerup',event=>{if(!pointer||pointer.id!==event.pointerId)return;const dx=event.clientX-pointer.x,dy=event.clientY-pointer.y;pointer=null;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.25)select(current+(dx<0?1:-1),true);else if(Math.abs(dx)<12&&Math.abs(dy)<12)toggle()});stage.addEventListener('pointercancel',()=>{pointer=null});
  root.addEventListener('keydown',event=>{if(event.key==='ArrowRight'||event.key==='ArrowLeft'){event.preventDefault();select(current+(event.key==='ArrowRight'?1:-1),true)}else if(event.key===' '&&event.target===root){event.preventDefault();toggle()}});
+ function unlockVideoAudio(event){if(!event.isTrusted||userMuted||!muted||event.target.closest('[data-story-sound]'))return;muted=false;player.muted=false;player.volume=1;if(inView&&!document.hidden&&!userPaused)play();else sync()}
+ document.addEventListener('pointerdown',unlockVideoAudio,{capture:true,passive:true});document.addEventListener('keydown',unlockVideoAudio,{capture:true});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)visibilityPause();else if(inView&&!userPaused)play()});
  show();
  if('IntersectionObserver'in window)new IntersectionObserver(entries=>{const e=entries[0];inView=e.isIntersecting&&e.intersectionRatio>=.4;if(inView&&!document.hidden&&!userPaused)play();else if(!inView)visibilityPause()},{threshold:[0,.4,.7]}).observe(stage);else{inView=true;play()}
