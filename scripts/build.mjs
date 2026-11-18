@@ -2,6 +2,7 @@ import { mkdir,copyFile,writeFile } from 'node:fs/promises';
 await mkdir('dist/campanhas',{recursive:true});
 await mkdir('dist/painel',{recursive:true});
 await mkdir('dist/assets',{recursive:true});
+for(const file of ["curio-quartos-v1.mp4","curio-quartos-v1.jpg","curio-capela-v1.mp4","curio-capela-v1.jpg","curio-casa-arvore-v1.mp4","curio-casa-arvore-v1.jpg"]) await copyFile('assets/'+file,'dist/assets/'+file);
 await copyFile('assets/campanhas-compartilhamento-v1.png','dist/assets/campanhas-compartilhamento-v1.png');
 await copyFile('assets/campanhas-compartilhamento-v2.png','dist/assets/campanhas-compartilhamento-v2.png');
 for(const f of ['index.html','logo.jpg','curio-aquarela.jpg']) await copyFile(f,`dist/${f}`);
