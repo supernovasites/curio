@@ -27,7 +27,23 @@
 .room-card summary { cursor: pointer; padding: .65rem; }
 .room-card summary img { display: block; width: 100%; height: 8rem; object-fit: cover; border-radius: .25rem; margin-bottom: .5rem; }
 .room-card > div { padding: 0 .65rem .65rem; }
-.room-editor-photo { width: min(100%,18rem); max-height: 12rem; object-fit: cover; margin-block: .5rem; }
+.room-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); align-items: start; gap: clamp(1rem, 3vw, 2rem); }
+.room-editor-media { display: grid; place-items: center; aspect-ratio: 4 / 3; overflow: hidden; border-radius: .5rem; background: #e9e6df; }
+.room-editor-media img { width: 100%; height: 100%; object-fit: cover; }
+.room-editor-content { min-width: 0; }
+.room-editor-content h2 { margin: 0 0 .35rem; }
+.room-editor-facts { margin: 0 0 .8rem; }
+.room-editor-details summary { width: fit-content; padding: .65rem .85rem; border: 1px solid #c5cdbf; border-radius: .35rem; font-weight: 600; }
+.room-editor-form fieldset { min-width: 0; margin: .9rem 0; padding: .65rem .85rem .85rem; border: 1px solid #d9ded5; border-radius: .35rem; }
+.room-editor-form legend { padding-inline: .3rem; font-weight: 600; }
+.room-editor-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: end; gap: .7rem; }
+.room-editor-fields label { min-width: 0; margin: 0; }
+.room-editor-description { grid-column: 1 / -1; }
+.room-editor-form input, .room-editor-form textarea { box-sizing: border-box; width: 100%; }
+@media (max-width: 700px) {
+  .room-editor { grid-template-columns: 1fr; }
+  .room-editor-media { aspect-ratio: 16 / 9; }
+}
 #registration-fields { min-width: 0; margin: 0 0 .75rem; }
 @media (max-width: 520px) {
   .reservation-header { padding: .75rem 1rem; }
@@ -41,4 +57,7 @@
   .reservation-form input, .reservation-form select, .reservation-form textarea { min-width: 0; min-height: 44px; font-size: 16px; }
   #registration-fields { min-width: 0; margin-inline: 0; padding: .65rem; }
   #access-button, #request-button { width: 100%; min-height: 44px; }
+  .room-editor-fields { grid-template-columns: 1fr; }
+  .room-editor-form input, .room-editor-form textarea { font-size: 16px; min-height: 44px; }
+  .room-editor-form button { width: 100%; min-height: 44px; }
 }
