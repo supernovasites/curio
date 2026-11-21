@@ -139,7 +139,7 @@ test('public and staff reservations share dates, accounts and approval state',as
     sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
   sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)')
     .run('staff','staff','Equipe',await hashPassword('password-test'),'admin');
-  const env = {DB:adapter(sqlite),ASSETS:{fetch:async()=>new Response('restricted page')}};
+  const env = {DB:adapter(sqlite),ASSETS:{fetch:async req=>new Response(new URL(req.url).pathname)}};
   const request = (path,method='GET',input,session) => worker.fetch(new Request('https://curio.test'+path,{
     method,headers:{Origin:'https://curio.test','Content-Type':'application/json',...(session?{Cookie:session}:{})},
     ...(input?{body:JSON.stringify(input)}:{})
@@ -195,6 +195,12 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal((await call('/campanhas/reservations/customers','POST',{q:'agata'},operator)).status,403);
   assert.equal((await call('/campanhas/reservations/dates','GET',null,operator)).status,403);
   assert.equal((await call('/campanhas/reservations','POST',{day,customerId},operator)).status,403);
+  for (const path of ['/reservas','/reservas/']) {
+    const publicPage = await request(path);
+    assert.equal(publicPage.status,200);
+    assert.equal(await publicPage.text(),'/reservar/');
+    assert.equal(publicPage.headers.get('Location'),null);
+  }
   const access = await request('/reservarquarto/');
   assert.equal(access.status,303);
   assert.equal(new URL(access.headers.get('Location')).search,'?continuar=reservarquarto');

@@ -477,12 +477,13 @@ export default {
   async fetch(req,env) {
     const url = new URL(req.url), path = url.pathname;
     const legacyPage = { '/reserva':'/reservar/', '/reserva/':'/reservar/',
-      '/reservas':'/reservarquarto/', '/reservas/':'/reservarquarto/',
       '/gestaodereservaaa':'/reservarquarto/', '/gestaodereservaaa/':'/reservarquarto/' }[path];
     let response;
     try {
       if (legacyPage && ['GET','HEAD'].includes(req.method))
         response = Response.redirect(new URL(legacyPage+url.search,url),308);
+      else if ((path==='/reservas' || path==='/reservas/') && ['GET','HEAD'].includes(req.method))
+        response = await env.ASSETS.fetch(new Request(new URL('/reservar/'+url.search,url),req));
       else if (path==='/reservarquarto' || path.startsWith('/reservarquarto/')) {
         const token = sessionToken(req,'curio_booking_admin');
         const user = env.DB && token ? await staffForToken(env.DB,await sha(token),Date.now()) : null;
