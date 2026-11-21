@@ -239,7 +239,7 @@ async function start() {
   $(customerPage ? '#customers' : '#reservations').hidden = false;
   if (customerPage) await loadCustomers();
   else if (reservedPage) {
-    $('#booking-title').textContent = 'Reservados';
+    $('#booking-title').textContent = 'Aprovar Reserva';
     $('#booking-controls').hidden = true;
     $('#booking-stages').hidden = false;
     catalog = await staff('/rooms');
