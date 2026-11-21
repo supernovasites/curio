@@ -75,7 +75,7 @@ export const today = () => new Intl.DateTimeFormat('en-CA',{
   timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'
 }).format(new Date());
 
-export function monthlyCalendar(root, describe, select, {navigationBelow=false} = {}) {
+export function monthlyCalendar(root, describe, select, {navigationBelow=false,emptyMessage=''} = {}) {
   let month = new Date(today().slice(0,7)+'-01T12:00:00Z');
   const label = new Intl.DateTimeFormat('pt-BR',{month:'long',year:'numeric',timeZone:'UTC'});
   const monthName = new Intl.DateTimeFormat('pt-BR',{month:'long',timeZone:'UTC'});
@@ -118,6 +118,7 @@ export function monthlyCalendar(root, describe, select, {navigationBelow=false} 
     for (let i=1+(5-first+7)%7;i<=days;i+=7) {
       const date = month.toISOString().slice(0,8)+String(i).padStart(2,'0');
       const info = describe(date);
+      if (!info) continue;
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'calendar-day '+info.state;
@@ -133,6 +134,12 @@ export function monthlyCalendar(root, describe, select, {navigationBelow=false} 
       button.append(period,hours,detail);
       button.onclick = () => { select(date); render(); };
       grid.append(button);
+    }
+    if (!grid.childElementCount && emptyMessage) {
+      const empty = document.createElement('p');
+      empty.className = 'calendar-empty';
+      empty.textContent = emptyMessage;
+      grid.append(empty);
     }
   }
   render();

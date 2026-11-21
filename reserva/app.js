@@ -5,11 +5,11 @@ const reserve = (path,method,data) => api('/api/reserva',path,method,data);
 let dates = new Set(), selected = '', account = null, accountVersion = 0;
 let roomVersion = 0;
 const picker = roomPicker($('#room-picker'),showSelection);
-const renderCalendar = monthlyCalendar($('#calendar'), day => ({
-  label:dates.has(day) ? 'Disponível' : 'Indisponível',
-  state:dates.has(day) ? 'available' : 'blocked',
-  disabled:!account || !dates.has(day),selected:day===selected
-}), day => { selected = day; loadRooms().catch(error=>message(error.message,true)); },{navigationBelow:true});
+const renderCalendar = monthlyCalendar($('#calendar'), day => dates.has(day) ? {
+  label:'Disponível',state:'available',disabled:!account,selected:day===selected
+} : null, day => { selected = day; loadRooms().catch(error=>message(error.message,true)); },{
+  navigationBelow:true,emptyMessage:'Nenhum fim de semana disponível neste mês.'
+});
 
 function showSelection() {
   $('#selected-date').textContent = !account ? 'Acesse sua reserva para selecionar um fim de semana.' :

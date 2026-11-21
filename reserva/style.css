@@ -34,6 +34,7 @@
 .calendar-title { justify-content: center; }
 .calendar-navigation { margin-bottom: .5rem; }
 .calendar-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%, 13rem),1fr)); gap: .5rem; text-align: center; }
+.calendar-empty { grid-column: 1 / -1; margin-block: .75rem; }
 .calendar-grid .calendar-day { min-height: 5.25rem; padding: .65rem; color: #23362a; background: #e9e6df; overflow-wrap: anywhere; line-height: 1.25; }
 .calendar-grid small { display: block; font-size: .78rem; margin-top: .25rem; }
 .calendar-grid .available { background: #d9ead1; }
