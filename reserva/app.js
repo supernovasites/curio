@@ -85,9 +85,9 @@ onSubmit($('#request-form'),async () => {
     if (error.status === 409) await loadDates();
     throw error;
   }
-  await loadAccount();
+  await Promise.all([loadAccount(),loadDates()]);
   message(account.phone ? 'Intenção enviada. Acompanhe em Minhas solicitações.' : 'Intenção enviada. Adicione um WhatsApp ao seu cadastro para receber instruções de pagamento.');
-});
+},showSelection);
 $('#logout').onclick = async () => {
   try {
     await reserve('/logout','POST');

@@ -87,12 +87,14 @@ async function createCustomer(db, input, publicRegistration = false) {
 const hotelDay = day => typeof day==='string' && day===dateOnly(day) &&
   new Date(day+'T12:00:00Z').getUTCDay()===5;
 const fridaySql = "strftime('%w',d.day)='5'";
-const weekendOccupancy = "SELECT 1 FROM reservations r WHERE r.day BETWEEN d.day AND date(d.day,'+2 days') AND r.status IN ('approved','confirmed')";
-const availableDates = "SELECT d.day FROM reservation_dates d WHERE d.open=1 AND d.day>=? AND "+fridaySql+" AND NOT EXISTS ("+weekendOccupancy+")";
+const weekendReservations = "SELECT 1 FROM reservations r WHERE r.day BETWEEN d.day AND date(d.day,'+2 days')";
+const weekendOccupancy = weekendReservations+" AND r.status IN ('approved','confirmed')";
+const weekendHold = weekendReservations+" AND r.status IN ('pending','approved','confirmed')";
+const availableDates = "SELECT d.day FROM reservation_dates d WHERE d.open=1 AND d.day>=? AND "+fridaySql+" AND NOT EXISTS ("+weekendHold+")";
 async function createReservation(db, contactId, day, userId = null) {
   if (!hotelDay(day) || day < localDay()) fail(400,'Selecione a sexta-feira de entrada do fim de semana, a partir de hoje.');
   const id = crypto.randomUUID();
-  const result = await db.prepare("INSERT INTO reservations(id,day,contact_id,status,updated_by) SELECT ?,d.day,c.id,'pending',? FROM ("+availableDates+") d CROSS JOIN contacts c WHERE d.day=? AND c.id=? AND c.active=1 AND NOT EXISTS (SELECT 1 FROM reservations r WHERE r.contact_id=c.id AND r.day BETWEEN d.day AND date(d.day,'+2 days') AND r.status='pending') ON CONFLICT DO NOTHING")
+  const result = await db.prepare("INSERT INTO reservations(id,day,contact_id,status,updated_by) SELECT ?,d.day,c.id,'pending',? FROM ("+availableDates+") d CROSS JOIN contacts c WHERE d.day=? AND c.id=? AND c.active=1 ON CONFLICT DO NOTHING")
     .bind(id,userId,localDay(),day,contactId).run();
   if (!result.meta.changes) fail(409,'Data indisponível, cliente inativo ou já existe um pedido para esta data.');
   return json({id},201);
@@ -206,7 +208,7 @@ async function manageReservations(req, db, path, user, audit) {
     return json({id},201);
   }
   if (path === '/reservations/dates' && method === 'GET') {
-    const {results} = await db.prepare("SELECT d.day,d.open,EXISTS("+weekendOccupancy+") booked FROM reservation_dates d WHERE "+fridaySql+" ORDER BY d.day").all();
+    const {results} = await db.prepare("SELECT d.day,d.open,EXISTS("+weekendHold+") booked FROM reservation_dates d WHERE "+fridaySql+" ORDER BY d.day").all();
     return json(results);
   }
   if (path === '/reservations/dates' && method === 'POST') {

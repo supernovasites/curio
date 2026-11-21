@@ -22,7 +22,7 @@ export function message(text, error = false) {
   $('#status').classList.toggle('error',error);
 }
 
-export function onSubmit(form, action) {
+export function onSubmit(form, action, onSettled) {
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const button = event.submitter;
@@ -34,6 +34,7 @@ export function onSubmit(form, action) {
       message(error.message,true);
     } finally {
       if (button) button.disabled = false;
+      onSettled?.();
     }
   });
 }

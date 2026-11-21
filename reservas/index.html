@@ -44,16 +44,7 @@
       <h1>Gestão de reservas</h1>
       <p><a href="/reservar/">Abrir página de reservas dos clientes</a></p>
       <section class="card">
-        <h2>Disponibilidade do mês</h2><div id="calendar" aria-label="Calendário mensal de gestão"></div><p id="selected-date" role="status"></p>
-        <form id="date-form" class="reservation-form">
-          <input name="day" type="hidden">
-          <button type="submit" value="open">Disponibilizar fim de semana</button>
-          <button type="submit" value="close" class="secondary">Bloquear fim de semana</button>
-        </form>
-
-      </section>
-      <section class="card">
-        <h2>Registrar intenção de reserva</h2>
+        <h2>Selecionar cliente</h2>
         <form id="reservation-search" class="reservation-form">
           <label>Buscar cliente por nome <input name="q" type="search"></label>
           <button class="secondary" type="submit">Buscar cliente</button>
@@ -62,8 +53,16 @@
         <form id="new-reservation" class="reservation-form">
           <label>Cliente <select name="customerId" required></select></label>
           <input name="day" type="hidden">
-          <button type="submit">Registrar intenção</button>
         </form>
+      </section>
+      <section class="card">
+        <h2>Disponibilidade do mês</h2><div id="calendar" aria-label="Calendário mensal de gestão"></div><p id="selected-date" role="status"></p>
+        <form id="date-form" class="reservation-form">
+          <input name="day" type="hidden">
+          <button type="submit" value="open">Disponibilizar fim de semana</button>
+          <button type="submit" value="close" class="secondary">Bloquear fim de semana</button>
+        </form>
+        <button id="register-intent" class="primary" type="submit" form="new-reservation" disabled>Registrar intenção</button>
       </section>
       <section class="card">
         <h2>Solicitações e reservas</h2>

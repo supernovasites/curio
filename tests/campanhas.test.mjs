@@ -213,9 +213,8 @@ test('public and staff reservations share dates, accounts and approval state',as
   const filtered = await (await call('/campanhas/customers/search','POST',{q:'agata',birthFrom:'1990-01-01',registeredTo:'2023-12-01'},staff)).json();
   assert.equal(filtered.total,1);
   assert.equal(filtered.rows[0].has_account,0);
-  const linked = await call('/campanhas/reservations','POST',{day,customerId},staff);
-  assert.equal(linked.status,201);
-  const {id:otherId} = await linked.json();
+  assert.deepEqual(await (await call('/reserva/dates')).json(),[]);
+  assert.equal((await call('/campanhas/reservations','POST',{day,customerId},staff)).status,409);
   assert.equal((await call('/campanhas/reservations/'+id,'PATCH',{status:'approved'},staff)).status,400);
   assert.equal((await call('/campanhas/reservations/'+id,'PATCH',{status:'approved',payment:'Pagamento de teste'},staff)).status,200);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[]);
@@ -226,22 +225,30 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal(whatsapp.status,303);
   assert.match(new URL(whatsapp.headers.get('Location')).searchParams.get('text'),/Pagamento de teste/);
   assert.ok(new URL(whatsapp.headers.get('Location')).searchParams.get('text').includes('Entrada: 27/11/2026 às 15h. Saída: 29/11/2026 às 15h.'));
-  assert.equal((await call('/campanhas/reservations/'+otherId,'PATCH',{status:'approved',payment:'Teste'},staff)).status,409);
   assert.equal((await call('/campanhas/reservations/'+id,'PATCH',{status:'confirmed'},staff)).status,200);
   const confirmed = await (await call('/reserva/me','GET',null,customer)).json();
   assert.deepEqual(confirmed.reservations,[{id,day,status:'confirmed'}]);
   assert.equal((await call('/campanhas/reservations/'+id,'PATCH',{status:'cancelled'},staff)).status,200);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[day]);
+  const linked = await call('/campanhas/reservations','POST',{day,customerId},staff);
+  assert.equal(linked.status,201);
+  const {id:otherId} = await linked.json();
+  assert.deepEqual(await (await call('/reserva/dates')).json(),[]);
+  assert.equal((await call('/reserva/requests','POST',{day},customer)).status,409);
+  assert.equal((await call('/campanhas/reservations/'+otherId,'PATCH',{status:'rejected'},staff)).status,200);
+  assert.deepEqual(await (await call('/reserva/dates')).json(),[day]);
+  const legacyPending = await call('/campanhas/reservations','POST',{day,customerId},staff);
+  const {id:legacyConflict} = await legacyPending.json();
   sqlite.prepare("INSERT INTO reservations(id,day,contact_id,status) VALUES('legacy-saturday',?,?,'confirmed')").run(oldSaturday,customerId);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[]);
-  assert.equal((await call('/campanhas/reservations/'+otherId,'PATCH',{status:'approved',payment:'Teste'},staff)).status,409);
+  assert.equal((await call('/campanhas/reservations/'+legacyConflict,'PATCH',{status:'approved',payment:'Teste'},staff)).status,409);
   assert.equal((await call('/campanhas/customers/'+customerId,'PATCH',{...other,name:'Ágata Editada',cpf:'11144477735'},staff)).status,200);
   assert.equal((await call('/reserva/login','POST',{cpf:'11144477735',birth_date:'1990-04-12'})).status,401);
   const newSession = await call('/reserva/login','POST',{cpf:'11144477735',birth_date:other.birth_date});
   assert.equal(newSession.status,200);
   const otherProfile = await (await call('/reserva/me','GET',null,session(newSession))).json();
   assert.equal(otherProfile.customer.name,'Ágata Editada');
-  assert.deepEqual(otherProfile.reservations.map(row=>row.id),['legacy-saturday',otherId]);
+  assert.deepEqual(new Set(otherProfile.reservations.map(row=>row.id)),new Set(['legacy-saturday',otherId,legacyConflict]));
   for (let attempt=0;attempt<5;attempt++) {
     assert.equal((await call('/reserva/login','POST',{cpf:'11144477735',birth_date:'1990-04-12'})).status,401);
   }

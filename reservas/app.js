@@ -9,25 +9,27 @@ const newReservation = $('#new-reservation');
 let selected = '', calendarDates = new Map(), reservations = [], canManage = false;
 let filters = {}, customerPageNumber = 1, searchVersion = 0;
 const dateForm = $('#date-form');
+const registerIntent = $('#register-intent');
+const holdsWeekend = row => ['pending','approved','confirmed'].includes(row.status);
 const onWeekend = (row,friday) => row.day>=friday && row.day<=weekendEnd(friday);
 const renderCalendar = monthlyCalendar($('#calendar'),day => {
   const calendarDate = calendarDates.get(day);
   const booking = reservations.find(row=>onWeekend(row,day) && ['approved','confirmed'].includes(row.status));
   const requests = reservations.filter(row=>onWeekend(row,day) && row.status==='pending').length;
   const open = calendarDate?.open && day>=today();
-  const label = booking ? 'Ocupada · '+booking.name : open ? 'Disponível' : 'Bloqueada';
-  return {state:booking ? 'booked' : open ? 'available' : 'blocked',
-    label:label+(requests ? ' · '+requests+' pendente(s)' : ''), selected:day===selected};
+  const label = booking ? 'Ocupada · '+booking.name : requests ? 'Bloqueada · intenção pendente' : open ? 'Disponível' : 'Bloqueada';
+  return {state:booking ? 'booked' : open && !requests ? 'available' : 'blocked',
+    label, selected:day===selected};
 },day=>{ selected = day; renderSelected(); });
 
 function renderSelected() {
-  const available = selected && calendarDates.get(selected)?.open && !calendarDates.get(selected)?.booked && !reservations.some(row=>onWeekend(row,selected) && ['approved','confirmed'].includes(row.status)) && selected>=today();
+  const available = selected && calendarDates.get(selected)?.open && !calendarDates.get(selected)?.booked && !reservations.some(row=>onWeekend(row,selected) && holdsWeekend(row)) && selected>=today();
   $('#selected-date').textContent = selected ? 'Fim de semana selecionado: '+weekendLabel(selected) : 'Selecione um fim de semana no calendário.';
   dateForm.elements.day.value = selected;
   dateForm.hidden = !canManage;
   for (const button of dateForm.querySelectorAll('button')) button.disabled = !selected || selected<today();
   newReservation.elements.day.value = selected;
-  newReservation.querySelector('button').disabled = !available;
+  registerIntent.disabled = !available || !newReservation.elements.customerId.value;
   list($('#reservation-list'),selected ? reservations.filter(row=>onWeekend(row,selected)) : reservations,renderReservation,'Nenhuma solicitação registrada.');
 }
 
@@ -73,6 +75,7 @@ async function loadCustomers(input = {}, page = 1) {
   } else {
     options(newReservation.elements.customerId,data.rows.map(row => [row.id,row.name+(row.city ? ' · '+row.city : '')]),'Selecione o cliente');
     pager($('#reservation-pages'),data);
+    renderSelected();
   }
 }
 
@@ -181,11 +184,15 @@ onSubmit($('#date-form'),async ({day},button) => {
   await loadDates();
   message(button?.value === 'close' ? 'Fim de semana bloqueado.' : 'Fim de semana disponibilizado.');
 });
+newReservation.elements.customerId.onchange = renderSelected;
 onSubmit(newReservation,async data => {
-  await staff('/reservations','POST',data);
-  await loadReservations();
-  message('Intenção registrada.');
-});
+  try {
+    await staff('/reservations','POST',data);
+    message('Intenção registrada. O fim de semana está bloqueado para novos pedidos.');
+  } finally {
+    await Promise.all([loadDates(),loadReservations()]);
+  }
+},renderSelected);
 onSubmit($('#login'),async data => {
   await staff('/login','POST',data);
   $('#login').reset();
