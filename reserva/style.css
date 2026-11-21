@@ -20,6 +20,8 @@
 .calendar-grid .booked { background: #f3dfb9; }
 .calendar-grid button[aria-pressed="true"] { outline: 2px solid #264e37; }
 .customer-editor summary { cursor: pointer; }
+#profile-details summary { padding-block: .5rem; font-weight: 700; }
+#profile-details { margin-block-end: .75rem; }
 #registration-fields { min-width: 0; margin: 0 0 .75rem; }
 @media (max-width: 520px) {
   .reservation-header { padding: .75rem 1rem; }

@@ -41,14 +41,20 @@
       <form id="request-form"><button id="request-button" type="submit" hidden>Enviar intenção de reserva</button></form>
     </section>
     <section id="account" class="card" hidden>
-      <h2>Meu cadastro</h2>
-      <form id="profile-form" class="reservation-form">
-        <label>Nome <input name="name" autocomplete="name" maxlength="120" required></label>
-        <label>WhatsApp <input name="phone" type="tel" autocomplete="tel" maxlength="24"></label>
-        <label>Cidade <input name="city" autocomplete="address-level2" maxlength="100"></label>
-        <label>UF <input name="state" autocomplete="address-level1" maxlength="40"></label>
-        <button type="submit">Salvar dados</button>
-      </form>
+      <details id="profile-details" class="customer-editor">
+        <summary>Meu cadastro</summary>
+        <form id="profile-form" class="reservation-form">
+          <label>Nome <input name="name" autocomplete="name" maxlength="120" required></label>
+          <label>WhatsApp <input name="phone" type="tel" autocomplete="tel" maxlength="24"></label>
+          <label>Cidade <input name="city" autocomplete="address-level2" maxlength="100"></label>
+          <label>UF <input name="state" autocomplete="address-level1" maxlength="40"></label>
+          <button type="submit">Salvar dados</button>
+        </form>
+        <form id="deletion-form">
+          <button class="secondary" type="submit">Solicitar exclusão do cadastro</button>
+        </form>
+        <p id="deletion-status" role="status" hidden>Solicitação de exclusão enviada à equipe.</p>
+      </details>
       <button id="logout" class="secondary" type="button">Sair do cadastro</button>
       <h2>Minhas solicitações</h2>
       <ul id="requests" class="reservation-list"></ul>

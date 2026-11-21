@@ -187,6 +187,14 @@ test('public and staff reservations share dates, accounts and approval state',as
   const created = await call('/campanhas/customers','POST',other,staff);
   assert.equal(created.status,201);
   const {id:customerId} = await created.json();
+  assert.equal((await call('/reserva/me/deletion-request','POST',{})).status,401);
+  assert.equal((await call('/reserva/me/deletion-request','POST',{customerId},customer)).status,202);
+  assert.equal((await call('/reserva/me/deletion-request','POST',{},customer)).status,202);
+  const deletionView = await (await call('/reserva/me','GET',null,customer)).json();
+  assert.ok(deletionView.deletionRequestedAt);
+  const deletionList = await (await call('/campanhas/customers/search','POST',{deletionRequested:true},staff)).json();
+  assert.deepEqual(deletionList.rows.map(row=>row.id),[deletionView.customer.id]);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) total FROM audit WHERE action='solicitou_exclusao_cliente'").get().total,1);
   sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)')
     .run('operator','operator','Operador',await hashPassword('operator-test'),'operador');
   const operator = session(await call('/campanhas/login','POST',{username:'operator',password:'operator-test'}));

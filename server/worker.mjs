@@ -102,6 +102,7 @@ async function createReservation(db, contactId, day, userId = null) {
 
 const customerCookie = (token, seconds) =>
   'curio_customer_v3='+token+'; Path=/api/reserva; HttpOnly; Secure; SameSite=Strict; Max-Age='+seconds;
+const deletionRequestAction = 'solicitou_exclusao_cliente';
 
 async function publicReservations(req, env, path) {
   const db = env.DB, method = req.method, now = Date.now();
@@ -142,7 +143,13 @@ async function publicReservations(req, env, path) {
   if (!customer) fail(401,'Informe CPF e data de nascimento para acessar seu cadastro.');
   if (path === '/me' && method === 'GET') {
     const {results} = await db.prepare('SELECT id,day,status FROM reservations WHERE contact_id=? ORDER BY day DESC,created_at DESC').bind(customer.id).all();
-    return json({customer,reservations:results});
+    const deletion = await db.prepare('SELECT created_at FROM audit WHERE action=? AND entity_id=? LIMIT 1').bind(deletionRequestAction,customer.id).first();
+    return json({customer,reservations:results,deletionRequestedAt:deletion?.created_at || null});
+  }
+  if (path === '/me/deletion-request' && method === 'POST') {
+    await db.prepare('INSERT INTO audit(action,entity_id) SELECT ?,? WHERE NOT EXISTS (SELECT 1 FROM audit WHERE action=? AND entity_id=?)')
+      .bind(deletionRequestAction,customer.id,deletionRequestAction,customer.id).run();
+    return json({ok:true},202);
   }
   if (path === '/me' && method === 'PATCH') {
     const [name,phone,city,state] = customerDetails(await body(req));
@@ -169,6 +176,8 @@ async function manageReservations(req, db, path, user, audit) {
     const args = [fold(clean(input.q,120))];
     let where = ' WHERE instr('+name+',?)>0';
     if (reservationSearch) where += ' AND c.active=1';
+    const deletionDate = "(SELECT MIN(a.created_at) FROM audit a WHERE a.action='"+deletionRequestAction+"' AND a.entity_id=c.id)";
+    if (!reservationSearch && input.deletionRequested === true) where += ' AND '+deletionDate+' IS NOT NULL';
     for (const [field,column,op] of [['registeredFrom','registered_at','>='],['registeredTo','registered_at','<='],['birthFrom','birth_date','>='],['birthTo','birth_date','<=']]) {
       if (reservationSearch || !input[field]) continue;
       const date = dateOnly(input[field]);
@@ -180,7 +189,7 @@ async function manageReservations(req, db, path, user, audit) {
     const pages = Math.max(1,Math.ceil(total.total/pageSize));
     const page = Math.min(pages,Math.max(1,Math.floor(Number(input.page)||1)));
     const fields = reservationSearch ? 'c.id,c.name,c.city,c.state' :
-      'c.id,c.name,c.phone,c.city,c.state,c.registered_at,c.birth_date,c.occupation,c.active,EXISTS(SELECT 1 FROM customer_accounts a WHERE a.contact_id=c.id) has_account';
+      'c.id,c.name,c.phone,c.city,c.state,c.registered_at,c.birth_date,c.occupation,c.active,EXISTS(SELECT 1 FROM customer_accounts a WHERE a.contact_id=c.id) has_account,'+deletionDate+' deletion_requested_at';
     const {results} = await db.prepare('SELECT '+fields+' FROM contacts c'+where+' ORDER BY '+name+',c.id LIMIT ? OFFSET ?')
       .bind(...args,pageSize,(page-1)*pageSize).all();
     await audit(user.id,reservationSearch?'buscou_cliente_reserva':'consultou_base_clientes','contacts');

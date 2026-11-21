@@ -51,7 +51,7 @@ function renderCustomer(item,row) {
   const details = document.createElement('details');
   details.className = 'customer-editor';
   const summary = document.createElement('summary');
-  summary.textContent = row.name+(row.active ? '' : ' · Inativo');
+  summary.textContent = row.name+(row.active ? '' : ' · Inativo')+(row.deletion_requested_at ? ' · Exclusão solicitada' : '');
   const form = document.createElement('form');
   form.className = 'reservation-form';
   customerFields(form,row);
@@ -176,7 +176,7 @@ onSubmit($('#customer-form'),async data => {
   await loadCustomers();
   message('Cliente cadastrado e disponível na base de campanhas.');
 });
-onSubmit($('#customer-search'),data => loadCustomers(data));
+onSubmit($('#customer-search'),data => loadCustomers({...data,deletionRequested:data.deletionRequested==='on'}));
 $('#customer-search').onreset = () => loadCustomers().catch(error=>message(error.message,true));
 onSubmit($('#reservation-search'),data => loadCustomers(data));
 onSubmit($('#date-form'),async ({day},button) => {

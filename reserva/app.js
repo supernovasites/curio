@@ -34,7 +34,14 @@ async function loadAccount() {
   $('#account').hidden = !account;
   renderCalendar();
   showSelection();
-  if (!account) return;
+  if (!account) {
+    $('#profile-details').open = false;
+    $('#profile-form').reset();
+    $('#requests').replaceChildren();
+    return;
+  }
+  $('#deletion-form').hidden = Boolean(data.deletionRequestedAt);
+  $('#deletion-status').hidden = !data.deletionRequestedAt;
   for (const key of ['name','phone','city','state']) $('#profile-form').elements[key].value = account[key] || '';
   list($('#requests'),data.reservations,(item,row) => {
     item.textContent = reservationLabel(row.day)+' · '+statuses[row.status];
@@ -76,6 +83,11 @@ onSubmit($('#profile-form'),async input => {
   await reserve('/me','PATCH',input);
   await loadAccount();
   message('Cadastro atualizado.');
+});
+onSubmit($('#deletion-form'),async () => {
+  await reserve('/me/deletion-request','POST');
+  $('#deletion-form').hidden = true;
+  $('#deletion-status').hidden = false;
 });
 onSubmit($('#request-form'),async () => {
   if (!account || !selected) return;
