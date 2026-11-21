@@ -149,6 +149,9 @@ test('public and staff reservations share dates, accounts and approval state',as
   const staff = session(await call('/campanhas/login','POST',{username:'staff',password:'password-test'}));
   const catalog = await (await call('/campanhas/rooms','GET',null,staff)).json();
   assert.equal(catalog.length,7);
+  sqlite.exec(await readFile('migrations/0009_provisional_child_rates.sql','utf8'));
+  const priced = await (await call('/campanhas/rooms','GET',null,staff)).json();
+  assert.ok(priced.every(room=>room.child_cents===room.adult_cents/2));
   sqlite.exec("UPDATE rooms SET stock=0 WHERE id NOT IN ('sede-3','arvore')");
   const sede = catalog.find(room=>room.id==='sede-3');
   const room = {roomId:'sede-3',adults:2,children:1};
@@ -184,7 +187,6 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal(profile.customer.name,input.name);
   assert.equal(profile.customer.cpf,undefined);
   assert.equal((await call('/campanhas/reservations','GET',null,customer)).status,401);
-  assert.equal((await call('/reserva/requests','POST',{day,...room},customer)).status,409);
   assert.equal((await call('/campanhas/rooms/sede-3','PATCH',{...sede,child_cents:30000},staff)).status,200);
   assert.equal((await call('/reserva/requests','POST',{day,...room,children:2},customer)).status,409);
   const submitted = await call('/reserva/requests','POST',{day,...room,customerId:'ignored'},customer);
@@ -229,6 +231,7 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal(access.status,303);
   assert.equal(new URL(access.headers.get('Location')).search,'?continuar=reservarquarto');
   assert.equal((await request('/reservarquarto/app.js')).status,303);
+  assert.equal(new URL((await request('/reservarquarto/reservados/')).headers.get('Location')).search,'?continuar=reservados');
   const oldPage = await request('/gestaodereservaaa/');
   assert.equal(oldPage.status,308);
   assert.equal(new URL(oldPage.headers.get('Location')).pathname,'/reservarquarto/');
@@ -263,6 +266,11 @@ test('public and staff reservations share dates, accounts and approval state',as
   const linked = await call('/campanhas/reservations','POST',{day,...room,customerId},staff);
   assert.equal(linked.status,201);
   const {id:otherId} = await linked.json();
+  assert.equal((await call('/campanhas/reservations/'+otherId+'/details','PATCH',{day,...room,adults:1},operator)).status,403);
+  assert.equal((await call('/campanhas/reservations/'+otherId+'/details','PATCH',{day,roomId:'arvore',adults:1,children:0},staff)).status,409);
+  const changed = await call('/campanhas/reservations/'+otherId+'/details','PATCH',{day,...room,adults:1},staff);
+  assert.equal(changed.status,200);
+  assert.equal((await changed.json()).quote.totalCents,250000);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[]);
   assert.equal((await call('/reserva/requests','POST',{day,...room},customer)).status,409);
   assert.equal((await call('/campanhas/reservations/'+otherId,'PATCH',{status:'rejected'},staff)).status,200);

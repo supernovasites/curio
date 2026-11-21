@@ -199,8 +199,9 @@ export function roomPicker(root, changed) {
         (room.child_cents===null ? 'tarifa a consultar' : money(room.child_cents)+' por diária');
       const pick = document.createElement('button');
       pick.type = 'button';
-      pick.className = 'secondary';
-      pick.textContent = 'Selecionar '+room.name;
+      pick.className = 'primary';
+      pick.textContent = 'Fazer orçamento';
+      pick.setAttribute('aria-label','Fazer orçamento para '+room.name);
       pick.onclick = () => {
         selected = room;
         adults.max = String(room.capacity);

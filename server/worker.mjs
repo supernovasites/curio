@@ -270,7 +270,7 @@ async function manageReservations(req, db, path, user, audit) {
     return json({ok:true});
   }
   if (path === '/reservations' && method === 'GET') {
-    const {results} = await db.prepare("SELECT r.id,r.day,r.status,r.quote,c.name,(c.phone<>'') has_phone FROM reservations r JOIN contacts c ON c.id=r.contact_id ORDER BY (r.status='pending') DESC,r.day DESC,r.created_at DESC").all();
+    const {results} = await db.prepare("SELECT r.id,r.day,r.status,r.room_id,r.quote,c.name,(c.phone<>'') has_phone FROM reservations r JOIN contacts c ON c.id=r.contact_id ORDER BY (r.status='pending') DESC,r.day DESC,r.created_at DESC").all();
     return json(results.map(readQuote));
   }
   if (path === '/reservations' && method === 'POST') {
@@ -288,7 +288,25 @@ async function manageReservations(req, db, path, user, audit) {
     const end = new Date(Date.parse(row.day+'T12:00:00Z')+2*86400000).toISOString().slice(0,10).split('-').reverse().join('/');
     const schedule = hotelDay(row.day) ? '\n\nEntrada: '+day+' às 15h. Saída: '+end+' às 15h.' : '';
     await audit(user.id,'abriu_whatsapp_reserva',whatsapp[1]);
-    return new Response(null,{status:303,headers:{Location:'https://wa.me/'+row.phone+'?text='+encodeURIComponent(message+schedule+(row.quote ? '\\nOrçamento: '+new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(JSON.parse(row.quote).totalCents/100) : ''))}});
+    return new Response(null,{status:303,headers:{Location:'https://wa.me/'+row.phone+'?text='+encodeURIComponent(message+schedule+(row.quote ? '\nOrçamento: '+new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(JSON.parse(row.quote).totalCents/100) : ''))}});
+  }
+  const editMatch = path.match(/^\/reservations\/([\w-]+)\/details$/);
+  if (editMatch && method === 'PATCH') {
+    const input = await body(req), {day,adults,children} = input, roomId = clean(input.roomId,80), id = editMatch[1];
+    if (!hotelDay(day) || day<localDay() || !roomId || !Number.isInteger(adults) || adults<1 ||
+        !Number.isInteger(children) || children<0 || adults+children>30) fail(400,'Confira o fim de semana, o quarto e a quantidade de hóspedes.');
+    const quote = "json_object('room',room.name,'adults',?,'children',?,'adultCents',room.adult_cents,'childCents',room.child_cents,'nights',2,'totalCents',2*(room.adult_cents*?+COALESCE(room.child_cents,0)*?))";
+    const other = weekendReservations+" AND r.id<>?"+holdingStatus;
+    const sql = "WITH candidate AS (SELECT d.day,room.id room_id,"+quote+" quote "+
+      "FROM reservation_dates d CROSS JOIN rooms room WHERE d.day=? AND d.open=1 AND room.id=? "+
+      "AND room.capacity>=? AND (?=0 OR room.child_cents IS NOT NULL) AND NOT EXISTS (SELECT 1 "+other+" AND r.room_id IS NULL) "+
+      "AND room.stock>(SELECT COUNT(*) "+other+" AND r.room_id=room.id)) "+
+      "UPDATE reservations SET (day,room_id,quote)=(SELECT day,room_id,quote FROM candidate),updated_at=CURRENT_TIMESTAMP,updated_by=? "+
+      "WHERE id=? AND status IN ('pending','approved') AND EXISTS (SELECT 1 FROM candidate) RETURNING id,day,quote";
+    const result = await db.prepare(sql).bind(adults,children,adults,children,day,roomId,adults+children,children,id,id,user.id,id).first();
+    if (!result) fail(409,'A reserva não pode ser editada ou o quarto não está disponível para a data e ocupação informadas.');
+    await audit(user.id,'editou_reserva',id);
+    return json(readQuote(result));
   }
   const match = path.match(/^\/reservations\/([\w-]+)$/);
   if (match && method === 'PATCH') {
@@ -539,7 +557,11 @@ export default {
       else if (path==='/reservarquarto' || path.startsWith('/reservarquarto/')) {
         const token = sessionToken(req,'curio_booking_admin');
         const user = env.DB && token ? await staffForToken(env.DB,await sha(token),Date.now()) : null;
-        if (!user) response = Response.redirect(new URL('/campanhas/?continuar=reservarquarto',url),303);
+        if (!user) {
+          const next = path.startsWith('/reservarquarto/reservados') ? 'reservados' :
+            path.startsWith('/reservarquarto/quartos') ? 'quartos' : 'reservarquarto';
+          response = Response.redirect(new URL('/campanhas/?continuar='+next,url),303);
+        }
         else if (user.role !== 'admin') fail(403,'Somente administradores podem acessar a gestão de reservas.');
         else response = await env.ASSETS.fetch(req);
       }

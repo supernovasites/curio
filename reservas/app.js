@@ -2,11 +2,13 @@ import {renderHeader} from '/campanhas/nav.js';
 import {$, api, weekendEnd, weekendLabel, reservationLabel, statuses, message, onSubmit, customerFields, options, list, monthlyCalendar, today, roomPicker, quoteLine} from '/reservar/common.js';
 
 const staff = (path,method,data) => api('/api/campanhas',path,method,data);
-const page = location.pathname.startsWith('/clientes') ? 'clientes' : 'reservas';
+const page = location.pathname.startsWith('/clientes') ? 'clientes' :
+  location.pathname.startsWith('/reservarquarto/reservados') ? 'reservado' : 'reservas';
+const reservedPage = page === 'reservado';
 const customerPage = page === 'clientes';
 const newReservation = $('#new-reservation');
 
-let selected = '', calendarDates = new Map(), reservations = [], canManage = false;
+let stage = 'all', catalog = [], selected = '', calendarDates = new Map(), reservations = [], canManage = false;
 let filters = {}, customerPageNumber = 1, searchVersion = 0;
 const dateForm = $('#date-form');
 const registerIntent = $('#register-intent');
@@ -40,7 +42,34 @@ function renderSelected() {
   for (const button of dateForm.querySelectorAll('button')) button.disabled = !selected || selected<today();
   newReservation.elements.day.value = selected;
   updateRegisterButton();
-  list($('#reservation-list'),selected ? reservations.filter(row=>onWeekend(row,selected)) : reservations,renderReservation,'Nenhuma solicitação registrada.');
+  renderBookings();
+}
+
+const stages = [
+  ['all','Total de reservas'],['pending','Aguardando aprovação'],['approved','Aprovadas'],
+  ['confirmed','Confirmadas'],['closed','Recusadas ou canceladas']
+];
+const inStage = (row,key) => key==='all' || (key==='closed' ? ['rejected','cancelled'].includes(row.status) : row.status===key);
+
+function renderBookings() {
+  if (reservedPage) {
+    const metrics = $('#booking-stages');
+    metrics.replaceChildren(...stages.map(([key,text]) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'metric';
+      button.classList.toggle('selected',stage===key);
+      button.setAttribute('aria-pressed',String(stage===key));
+      const count = document.createElement('strong');
+      count.textContent = reservations.filter(row=>inStage(row,key)).length.toLocaleString('pt-BR');
+      button.append(text,count);
+      button.onclick = ()=>{stage=key;renderBookings();metrics.children[stages.findIndex(([id])=>id===key)].focus();};
+      return button;
+    }));
+  }
+  const rows = reservedPage ? reservations.filter(row=>inStage(row,stage)) :
+    selected ? reservations.filter(row=>onWeekend(row,selected)) : reservations;
+  list($('#reservation-list'),rows,renderReservation,'Nenhuma reserva neste estágio.');
 }
 
 function pager(element,data) {
@@ -120,6 +149,33 @@ function addAction(actions,row,label,status) {
   actions.append(button);
 }
 
+function reservationEditor(row) {
+  const editor = document.createElement('details');
+  editor.className = 'customer-editor';
+  const title = document.createElement('summary');
+  title.textContent = 'Editar reserva';
+  const form = document.createElement('form');
+  form.className = 'reservation-form';
+  form.innerHTML = '<label>Sexta-feira de entrada <input name="day" type="date" required></label>'+
+    '<label>Quarto <select name="roomId" required></select></label>'+
+    '<label>Adultos (12 anos ou mais) <input name="adults" type="number" min="1" max="30" required></label>'+
+    '<label>Crianças (até 11 anos) <input name="children" type="number" min="0" max="29" required></label>'+
+    '<button type="submit" class="primary">Salvar reserva</button>';
+  const fields = form.elements;
+  fields.day.value = row.day;
+  options(fields.roomId,catalog.map(room=>[room.id,room.name]),'Escolha um quarto');
+  fields.roomId.value = row.room_id || '';
+  fields.adults.value = row.quote?.adults ?? 1;
+  fields.children.value = row.quote?.children ?? 0;
+  onSubmit(form,async data=>{
+    const saved = await staff('/reservations/'+row.id+'/details','PATCH',{...data,adults:Number(data.adults),children:Number(data.children)});
+    await loadReservations();
+    message('Reserva atualizada. Orçamento: '+quoteLine(saved.quote));
+  });
+  editor.append(title,form);
+  return editor;
+}
+
 function renderReservation(item,row) {
   const label = document.createElement('strong');
   label.textContent = reservationLabel(row.day)+' · '+row.name+' · '+statuses[row.status];
@@ -129,6 +185,7 @@ function renderReservation(item,row) {
     budget.textContent = 'Orçamento: '+quoteLine(row.quote);
     item.append(budget);
   }
+  if (reservedPage && ['pending','approved'].includes(row.status)) item.append(reservationEditor(row));
   const actions = document.createElement('div');
   actions.className = 'reservation-actions';
   item.append(actions);
@@ -161,7 +218,8 @@ async function loadReservations() {
 
 async function changeReservation(row,status,payment) {
   await staff('/reservations/'+row.id,'PATCH',{status,payment});
-  await Promise.all([loadDates(),loadReservations()]);
+  if (reservedPage) await loadReservations();
+  else await Promise.all([loadDates(),loadReservations()]);
   message(status === 'approved' ? 'Intenção aprovada. Use o link da solicitação para enviar os dados de pagamento pelo WhatsApp.' : 'Status atualizado.');
 }
 
@@ -180,7 +238,13 @@ async function start() {
   if (customerPage && !canManage) { message('Somente administradores podem acessar a base de clientes.',true); return; }
   $(customerPage ? '#customers' : '#reservations').hidden = false;
   if (customerPage) await loadCustomers();
-  else await Promise.all([loadCustomers(),loadDates(),loadReservations()]);
+  else if (reservedPage) {
+    $('#booking-title').textContent = 'Reservados';
+    $('#booking-controls').hidden = true;
+    $('#booking-stages').hidden = false;
+    catalog = await staff('/rooms');
+    await loadReservations();
+  } else await Promise.all([loadCustomers(),loadDates(),loadReservations()]);
   message('');
 }
 

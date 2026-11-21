@@ -42,7 +42,8 @@
       </section>
     </section>
     <section id="reservations" hidden>
-      <h1>Gestão de reservas</h1>
+      <h1 id="booking-title">Gestão de reservas</h1>
+      <div id="booking-controls">
       <p><a href="/reservas/">Abrir página de reservas dos clientes</a></p>
       <section class="card">
         <h2>Selecionar cliente</h2>
@@ -66,8 +67,10 @@
         <div id="room-picker"></div>
         <button id="register-intent" class="primary" type="submit" form="new-reservation" disabled>Registrar intenção</button>
       </section>
+      </div>
       <section class="card">
         <h2>Solicitações e reservas</h2>
+        <div id="booking-stages" class="metrics" aria-label="Estágios de reserva" hidden></div>
         <ul id="reservation-list" class="reservation-list"></ul>
       </section>
     </section>
