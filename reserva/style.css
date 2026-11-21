@@ -59,6 +59,8 @@
   .reservation-form { align-items: stretch; }
   .reservation-form label, .reservation-form button { flex: 1 1 100%; min-width: 0; }
   .reservation-form input, .reservation-form select, .reservation-form textarea { min-width: 0; min-height: 44px; font-size: 16px; }
+  .public-reservations #login > .reservation-form { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.15fr); gap: .5rem; }
+  .public-reservations #login > .reservation-form input { box-sizing: border-box; width: 100%; padding-inline: .45rem; }
   #registration-fields { min-width: 0; margin-inline: 0; padding: .65rem; }
   #access-button, #request-button { width: 100%; min-height: 44px; }
   .room-editor-fields { grid-template-columns: 1fr; }
