@@ -94,10 +94,16 @@ const remainingRooms = '(room.stock-(SELECT COUNT(*) '+weekendReservations+' AND
 const availableDates = "SELECT d.day FROM reservation_dates d WHERE d.open=1 AND d.day>=? AND "+fridaySql+
   " AND NOT "+legacyHold+" AND EXISTS(SELECT 1 FROM rooms room WHERE "+remainingRooms+">0)";
 
+const photoColumns = "(SELECT json_group_array(json_object('id',id,'url',COALESCE(static_url,'/api/room-photos/'||id))) FROM (SELECT id,static_url FROM room_photos WHERE room_id=room.id ORDER BY sequence)) photos";
+function roomWithPhotos(row) {
+  const photos = JSON.parse(row.photos || '[]');
+  return {...row,photos,photo:photos[0]?.url || ''};
+}
+
 async function roomsForDate(db, day) {
   if (!hotelDay(day) || day<localDay()) fail(400,'Selecione uma sexta-feira disponível.');
-  const {results} = await db.prepare('SELECT room.*, '+remainingRooms+' remaining FROM reservation_dates d CROSS JOIN rooms room WHERE d.day=? AND d.open=1 AND NOT '+legacyHold+' AND '+remainingRooms+'>0 ORDER BY room.name').bind(day).all();
-  return json(results.map(({stock,...room})=>room));
+  const {results} = await db.prepare('SELECT room.*, '+photoColumns+', '+remainingRooms+' remaining FROM reservation_dates d CROSS JOIN rooms room WHERE d.day=? AND d.open=1 AND NOT '+legacyHold+' AND '+remainingRooms+'>0 ORDER BY room.name').bind(day).all();
+  return json(results.map(({stock,...room})=>roomWithPhotos(room)));
 }
 
 async function createReservation(db, contactId, input, userId = null) {
@@ -184,24 +190,94 @@ function readQuote(row) {
   return {...row,quote:row.quote ? JSON.parse(row.quote) : null};
 }
 
+const maxRoomPhotoBytes = 750000;
+function imageType(bytes) {
+  const ascii = (offset,length) => String.fromCharCode(...bytes.slice(offset,offset+length));
+  if (bytes[0]===255 && bytes[1]===216 && bytes[2]===255) return 'image/jpeg';
+  if (bytes[0]===137 && ascii(1,7)==='PNG\r\n\u001a\n') return 'image/png';
+  if (ascii(0,4)==='RIFF' && ascii(8,4)==='WEBP') return 'image/webp';
+  return '';
+}
+
+async function roomUpload(req) {
+  const limit = 5*maxRoomPhotoBytes+64000;
+  if (!req.body || Number(req.headers.get('Content-Length'))>limit) fail(413,'As fotos excedem o tamanho permitido.');
+  let total = 0;
+  const bounded = req.body.pipeThrough(new TransformStream({
+    transform(chunk,controller) {
+      total += chunk.length;
+      if (total>limit) controller.error(Error('Fotos muito grandes.'));
+      else controller.enqueue(chunk);
+    }
+  }));
+  let form, input;
+  try {
+    form = await new Response(bounded,{headers:{'Content-Type':req.headers.get('Content-Type')}}).formData();
+    input = JSON.parse(form.get('details'));
+  } catch { fail(400,'Não foi possível ler os dados do quarto e as fotos.'); }
+  const files = form.getAll('photos');
+  const remove = input?.remove || [];
+  if (files.length>5 || !Array.isArray(remove) || remove.length>5 || remove.some(id=>typeof id!=='string'||!/^[a-z0-9-]{1,80}$/i.test(id)))
+    fail(400,'Selecione até cinco fotos.');
+  const photos = [];
+  for (const file of files) {
+    if (typeof file==='string' || file.size<12 || file.size>maxRoomPhotoBytes) fail(400,'Cada foto deve ter até 750 KB.');
+    const bytes = new Uint8Array(await file.arrayBuffer()), mime = imageType(bytes);
+    if (!mime) fail(400,'Use fotos em JPG, PNG ou WebP.');
+    photos.push({id:crypto.randomUUID(),mime,payload:encodePhoto(bytes)});
+  }
+  return {input,photos,remove};
+}
+
+function encodePhoto(bytes) {
+  if (typeof bytes.toBase64==='function') return bytes.toBase64();
+  let binary = '';
+  for (let i=0;i<bytes.length;i+=32768) binary += String.fromCharCode(...bytes.subarray(i,i+32768));
+  return btoa(binary);
+}
+
+async function roomPhoto(req, env, id) {
+  if (!env.DB) fail(503,'Fotos indisponíveis.');
+  const row = await env.DB.prepare('SELECT mime,payload FROM room_photos WHERE id=? AND payload IS NOT NULL').bind(id).first();
+  if (!row) fail(404,'Foto não encontrada.');
+  const bytes = req.method==='HEAD' ? null : typeof Uint8Array.fromBase64==='function'
+    ? Uint8Array.fromBase64(row.payload) : Uint8Array.from(atob(row.payload),c=>c.charCodeAt(0));
+  return new Response(bytes,{headers:{'Content-Type':row.mime}});
+}
+
 async function manageRooms(req,db,path,audit,user) {
+  const catalog = 'SELECT room.*, '+photoColumns+' FROM rooms room';
   if (path === '/rooms' && req.method === 'GET')
-    return json((await db.prepare('SELECT * FROM rooms ORDER BY name').all()).results);
-  const match = path.match(/^\/rooms\/([\w-]+)$/);
-  if (!match || req.method !== 'PATCH') fail(404,'Quarto não encontrado.');
-  const input = await body(req);
+    return json((await db.prepare(catalog+' ORDER BY room.name').all()).results.map(roomWithPhotos));
+  const match = path.match(/^\/rooms\/([\w-]+)$/), creating = path==='/rooms' && req.method==='POST';
+  if (!creating && (!match || req.method!=='PATCH')) fail(404,'Quarto não encontrado.');
+  const id = creating ? crypto.randomUUID() : match[1];
+  const {input,photos,remove} = req.headers.get('Content-Type')?.startsWith('multipart/form-data')
+    ? await roomUpload(req) : {input:await body(req),photos:[],remove:[]};
+  if (!input || typeof input!=='object') fail(400,'Informe os dados do quarto.');
   const {capacity,stock,adult_cents,child_cents} = input;
-  const name = clean(input.name,100), description = clean(input.description,2000), photo = clean(input.photo,500);
+  const name = clean(input.name,100), description = clean(input.description,2000);
   const price = value => Number.isInteger(value) && value>=0 && value<=10000000;
   if (!name || !Number.isInteger(capacity) || capacity<1 || capacity>30 || !Number.isInteger(stock) || stock<0 || stock>100 ||
-      !price(adult_cents) || (child_cents!==null && !price(child_cents)) ||
-      (photo && !/^https:\/\/s3-cdn\.hotellinksolutions\.com\/hbe\/data\/a0966616-995f-1748368822-4cab-adc8-88e27afe5e1a\/gallery\/room\/[\w./%-]+$/.test(photo)))
-    fail(400,'Confira nome, capacidade, estoque, tarifas e o link da foto do Hospedin.');
-  const result = await db.prepare('UPDATE rooms SET name=?,description=?,photo=?,capacity=?,stock=?,adult_cents=?,child_cents=? WHERE id=?')
-    .bind(name,description,photo,capacity,stock,adult_cents,child_cents,match[1]).run();
-  if (!result.meta.changes) fail(404,'Quarto não encontrado.');
-  await audit(user.id,'alterou_quarto',match[1]);
-  return json({ok:true});
+      !price(adult_cents) || (child_cents!==null && !price(child_cents)))
+    fail(400,'Confira nome, capacidade, estoque e tarifas.');
+  if (!creating && !(await db.prepare('SELECT id FROM rooms WHERE id=?').bind(id).first())) fail(404,'Quarto não encontrado.');
+  const statement = creating
+    ? 'INSERT INTO rooms(name,description,capacity,stock,adult_cents,child_cents,id) VALUES(?,?,?,?,?,?,?)'
+    : 'UPDATE rooms SET name=?,description=?,capacity=?,stock=?,adult_cents=?,child_cents=? WHERE id=?';
+  const changes = [db.prepare(statement).bind(name,description,capacity,stock,adult_cents,child_cents,id)];
+  for (const photoId of remove) changes.push(db.prepare('DELETE FROM room_photos WHERE room_id=? AND id=?').bind(id,photoId));
+  const insert = 'INSERT INTO room_photos(id,room_id,mime,payload,slot) VALUES(?,?,?,?,('+
+    'SELECT MIN(column1) FROM (VALUES(1),(2),(3),(4),(5)) WHERE column1 NOT IN (SELECT slot FROM room_photos WHERE room_id=?)))';
+  for (const photo of photos) changes.push(db.prepare(insert).bind(photo.id,id,photo.mime,photo.payload,id));
+  try {
+    await db.batch(changes);
+  } catch (error) {
+    if (/NOT NULL constraint failed: room_photos\.slot/i.test(error.message)) fail(409,'O quarto pode ter até cinco fotos. Remova uma foto para liberar espaço.');
+    throw error;
+  }
+  await audit(user.id,creating?'criou_quarto':'alterou_quarto',id);
+  return json(roomWithPhotos(await db.prepare(catalog+' WHERE room.id=?').bind(id).first()),creating?201:200);
 }
 
 async function manageReservations(req, db, path, user, audit) {
@@ -215,8 +291,12 @@ async function manageReservations(req, db, path, user, audit) {
     const fold = text => text.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
     const name = [...'áàâãäéèêëíìîïóòôõöúùûüç'].reduce((sql,letter) =>
       "replace(replace("+sql+",'"+letter+"','"+fold(letter)+"'),'"+letter.toUpperCase()+"','"+fold(letter)+"')", 'lower(c.name)');
-    const args = [fold(clean(input.q,120))];
-    let where = ' WHERE instr('+name+',?)>0';
+    const q = clean(input.q,120);
+    const cpf = q.replace(/[.\s-]/g,'');
+    const byCpf = /^\d{11}$/.test(cpf);
+    const args = [byCpf ? cpf : fold(q)];
+    let where = byCpf ? ' WHERE EXISTS(SELECT 1 FROM customer_accounts a WHERE a.contact_id=c.id AND a.cpf=?)' :
+      ' WHERE instr('+name+',?)>0';
     if (reservationSearch) where += ' AND c.active=1';
     const deletionDate = "(SELECT MIN(a.created_at) FROM audit a WHERE a.action='"+deletionRequestAction+"' AND a.entity_id=c.id)";
     if (!reservationSearch && input.deletionRequested === true) where += ' AND '+deletionDate+' IS NOT NULL';
@@ -581,6 +661,8 @@ export default {
           response=new Response(null,{status:204});
         }
       }
+      else if (/^\/api\/room-photos\/[a-f0-9-]{36}$/.test(path) && ['GET','HEAD'].includes(req.method))
+        response=await roomPhoto(req,env,path.split('/').at(-1));
       else if(path.startsWith('/api/reserva/')) response=await publicReservations(req,env,path.slice('/api/reserva'.length));
       else if(path.startsWith('/api/campanhas/')) response=await api(req,env,path.slice('/api/campanhas'.length));
       else if(['/usuarios','/usuarios/','/mensagens','/mensagens/'].includes(path))response=await env.ASSETS.fetch(new Request(new URL('/campanhas/',req.url),req));
@@ -593,7 +675,7 @@ export default {
       headers.set('Cache-Control','no-store');
       headers.set('Referrer-Policy','no-referrer');
       headers.set('X-Robots-Tag','noindex');
-      headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://s3-cdn.hotellinksolutions.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://wa.me https://*.whatsapp.com");
+      headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://wa.me https://*.whatsapp.com");
     }
     return new Response(response.body,{status:response.status,headers});
   }

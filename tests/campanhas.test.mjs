@@ -135,7 +135,7 @@ test('public and staff reservations share dates, accounts and approval state',as
   t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,10,21,15)});
   const sqlite = new DatabaseSync(':memory:');
   t.after(()=>sqlite.close());
-  for (const file of ['0001_campanhas','0003_contact_details','0004_reserva_realizada','0006_reservations','0007_customer_directory','0008_rooms'])
+  for (const file of ['0001_campanhas','0003_contact_details','0004_reserva_realizada','0006_reservations','0007_customer_directory','0008_rooms','0010_room_photos'])
     sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
   sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)')
     .run('staff','staff','Equipe',await hashPassword('password-test'),'admin');
@@ -149,6 +149,32 @@ test('public and staff reservations share dates, accounts and approval state',as
   const staff = session(await call('/campanhas/login','POST',{username:'staff',password:'password-test'}));
   const catalog = await (await call('/campanhas/rooms','GET',null,staff)).json();
   assert.equal(catalog.length,7);
+  assert.ok(catalog.every(room=>room.photos.length===1 && room.photo.startsWith('/assets/quartos/')));
+  const picture = await readFile('assets/quartos/arvore.jpg');
+  const uploadRoom = (path,method,details,number,auth=staff) => {
+    const form = new FormData();
+    form.set('details',JSON.stringify(details));
+    for (let i=0;i<number;i++) form.append('photos',new File([picture],'foto.jpg',{type:'image/jpeg'}));
+    return worker.fetch(new Request('https://curio.test/api/campanhas'+path,{
+      method,headers:{Origin:'https://curio.test',Cookie:auth},body:form
+    }),env);
+  };
+  const roomDetails = {name:'Novo quarto de teste',description:'Quarto de teste',stock:0,capacity:3,adult_cents:95000,child_cents:47500};
+  const added = await uploadRoom('/rooms','POST',roomDetails,5);
+  assert.equal(added.status,201);
+  const newRoom = await added.json();
+  assert.equal(newRoom.photos.length,5);
+  assert.equal(newRoom.photo,newRoom.photos[0].url);
+  assert.equal((await uploadRoom('/rooms/'+newRoom.id,'PATCH',{...roomDetails,name:'Não salvar'},1)).status,409);
+  const photo = await request(newRoom.photo);
+  assert.equal(photo.headers.get('Content-Type'),'image/jpeg');
+  assert.deepEqual(Buffer.from(await photo.arrayBuffer()),picture);
+  const actualRoom = (await (await call('/campanhas/rooms','GET',null,staff)).json()).find(room=>room.id===newRoom.id);
+  assert.equal(actualRoom.name,roomDetails.name);
+  const changedGallery = await uploadRoom('/rooms/'+newRoom.id,'PATCH',{...roomDetails,remove:[newRoom.photos[0].id]},1);
+  assert.equal(changedGallery.status,200);
+  assert.equal((await changedGallery.json()).photo,newRoom.photos[1].url);
+  assert.equal((await request(newRoom.photo)).status,404);
   sqlite.exec(await readFile('migrations/0009_provisional_child_rates.sql','utf8'));
   const priced = await (await call('/campanhas/rooms','GET',null,staff)).json();
   assert.ok(priced.every(room=>room.child_cents===room.adult_cents/2));

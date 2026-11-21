@@ -13,6 +13,7 @@ sqlite.exec(await readFile('migrations/0006_reservations.sql','utf8'));
 sqlite.exec(await readFile('migrations/0007_customer_directory.sql','utf8'));
 sqlite.exec(await readFile('migrations/0008_rooms.sql','utf8'));
 sqlite.exec(await readFile('migrations/0009_provisional_child_rates.sql','utf8'));
+sqlite.exec(await readFile('migrations/0010_room_photos.sql','utf8'));
 const DB={prepare(sql){const stmt=sqlite.prepare(sql);let args=[];const api={
   bind(...v){args=v;return api;},
   async first(){return stmt.get(...args)||null;},

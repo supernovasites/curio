@@ -39,6 +39,10 @@
 .room-editor-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: end; gap: .7rem; }
 .room-editor-fields label { min-width: 0; margin: 0; }
 .room-editor-description { grid-column: 1 / -1; }
+.room-photo-gallery { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,8rem),1fr)); gap: .5rem; margin-block: .7rem; }
+.room-photo-gallery img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: .35rem; }
+.room-photo-gallery button { width: 100%; font-size: .8rem; }
+.room-photo-gallery .is-removed img { opacity: .45; }
 .room-editor-form input, .room-editor-form textarea { box-sizing: border-box; width: 100%; }
 @media (max-width: 700px) {
   .room-editor { grid-template-columns: 1fr; }

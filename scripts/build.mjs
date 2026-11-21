@@ -3,6 +3,9 @@ await mkdir('dist/campanhas',{recursive:true});
 await mkdir('dist/painel',{recursive:true});
 for(const path of ['reservar','reservarquarto','clientes']) await mkdir('dist/'+path,{recursive:true});
 await mkdir('dist/assets',{recursive:true});
+await mkdir('dist/assets/quartos',{recursive:true});
+for (const id of ['anexo-3','anexo-4','anexo-5','arvore','manga-rosa','sede-3','sede-4'])
+  await copyFile('assets/quartos/'+id+'.jpg','dist/assets/quartos/'+id+'.jpg');
 for(const file of ["curio-quartos-v1.mp4","curio-quartos-v1.jpg","curio-capela-v1.mp4","curio-capela-v1.jpg","curio-casa-arvore-v1.mp4","curio-casa-arvore-v1.jpg"]) await copyFile('assets/'+file,'dist/assets/'+file);
 await copyFile('assets/campanhas-compartilhamento-v1.png','dist/assets/campanhas-compartilhamento-v1.png');
 await copyFile('assets/campanhas-compartilhamento-v2.png','dist/assets/campanhas-compartilhamento-v2.png');

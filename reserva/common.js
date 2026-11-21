@@ -213,7 +213,20 @@ export function roomPicker(root, changed) {
         update();
         adults.focus();
       };
-      details.append(description,rates,pick);
+      details.append(description,rates);
+      if (room.photos?.length>1) {
+        const gallery = document.createElement('div');
+        gallery.className = 'room-photo-gallery';
+        for (const [index,entry] of room.photos.slice(1).entries()) {
+          const image = document.createElement('img');
+          image.src = entry.url;
+          image.alt = 'Foto '+(index+2)+' de '+room.name;
+          image.loading = 'lazy';
+          gallery.append(image);
+        }
+        details.append(gallery);
+      }
+      details.append(pick);
       card.append(summary,details);
       cards.append(card);
     }
