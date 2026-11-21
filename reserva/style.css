@@ -1,5 +1,23 @@
 [hidden] { display: none !important; }
-.reservation-header { padding: 1rem max(1rem, calc((100vw - 1100px) / 2)); background: #fff; }
+.reservation-header { width: min(100%,1080px); margin-inline: auto; background: #fcfaf5; }
+.reservation-header .home-header { display: flex; align-items: center; margin-inline: 40px; padding: 12px 0; border-bottom: 1px solid #b9ad8a66; }
+.reservation-header .home-brand { display: flex; align-items: center; gap: 13px; color: #244735; text-decoration: none; }
+.reservation-header .home-brand:hover { text-decoration: underline; text-underline-offset: 6px; }
+.reservation-header .home-brand .logo { width: 42px; height: 42px; object-fit: cover; border-radius: 50%; }
+.reservation-header .home-brand span { font: 19px Georgia,serif; letter-spacing: .5px; }
+.reservation-header .home-brand small { display: block; margin-top: 3px; font: 8px Arial,sans-serif; letter-spacing: 2.3px; }
+@media (max-width: 800px) {
+  .reservation-header .home-header { margin-inline: 22px; padding-block: 10px; }
+  .reservation-header .home-brand .logo { width: 36px; height: 36px; }
+  .reservation-header .home-brand span { font-size: 17px; }
+}
+@media (max-width: 480px) {
+  .reservation-header .home-header { margin-inline: 20px; }
+}
+@media (max-width: 420px) {
+  .reservation-header .home-brand { gap: 8px; }
+  .reservation-header .home-brand small { letter-spacing: 1px; }
+}
 .public-reservations { background: #f5f3eb; }
 .public-reservations .workspace { max-width: 1020px; }
 .reservation-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem; align-items: start; }
@@ -52,7 +70,6 @@
 }
 #registration-fields { min-width: 0; margin: 0 0 .75rem; }
 @media (max-width: 520px) {
-  .reservation-header { padding: .75rem 1rem; }
   .calendar-heading { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
   .calendar-heading h3 { grid-column: 1 / -1; grid-row: 1; }
   .calendar-heading button, .reservation-form button, #request-button { min-height: 44px; }
