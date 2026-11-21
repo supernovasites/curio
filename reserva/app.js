@@ -39,8 +39,9 @@ async function loadAccount() {
 onSubmit($('#register'),async input => {
   await reserve('/register','POST',input);
   $('#register').reset();
-  await loadAccount();
-  message('Cadastro criado. Você já pode enviar sua intenção de reserva.');
+  $('#login').elements.cpf.value = input.cpf;
+  $('#login').elements.birth_date.focus();
+  message('Use CPF e data de nascimento em Acessar meu cadastro.');
 });
 onSubmit($('#login'),async input => {
   await reserve('/login','POST',input);

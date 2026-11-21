@@ -63,14 +63,14 @@ function renderCustomer(item,row) {
 
 async function loadCustomers(input = {}, page = 1) {
   const version = ++searchVersion;
-  const data = await staff('/customers/search','POST',{...input,page,activeOnly:!customerPage});
+  const data = await staff(customerPage ? '/customers/search' : '/reservations/customers','POST',{...input,page});
   if (version!==searchVersion) return;
   filters = input; customerPageNumber = data.page;
   if (customerPage) {
     list($('#customer-list'),data.rows,renderCustomer,'Nenhum cliente encontrado.');
     pager($('#customer-pages'),data);
   } else {
-    options(newReservation.elements.customerId,data.rows.map(row => [row.id,row.name+(row.phone ? ' · +'+row.phone : '')]),'Selecione o cliente');
+    options(newReservation.elements.customerId,data.rows.map(row => [row.id,row.name+(row.city ? ' · '+row.city : '')]),'Selecione o cliente');
     pager($('#reservation-pages'),data);
   }
 }
@@ -83,11 +83,8 @@ async function loadDates() {
 }
 
 function whatsapp(row) {
-  const text = row.status === 'confirmed'
-    ? 'Olá, '+row.name+'! Sua reserva na Fazenda Curió para '+formatDay(row.day)+' está confirmada.'
-    : 'Olá, '+row.name+'! Sua solicitação para '+formatDay(row.day)+' na Fazenda Curió foi aprovada.\n\nDados para pagamento:\n'+row.payment+'\n\nEnvie o comprovante por aqui para confirmarmos a reserva.';
   const link = document.createElement('a');
-  link.href = 'https://wa.me/'+row.phone+'?text='+encodeURIComponent(text);
+  link.href = '/api/campanhas/reservations/'+encodeURIComponent(row.id)+'/whatsapp';
   link.target = '_blank';
   link.rel = 'noopener';
   link.textContent = row.status === 'confirmed' ? 'Enviar confirmação pelo WhatsApp' : 'Enviar dados de pagamento pelo WhatsApp';
@@ -124,13 +121,13 @@ function renderReservation(item,row) {
     addAction(actions,row,'Recusar','rejected');
   }
   if (row.status === 'approved') {
-    if (row.phone) actions.append(whatsapp(row));
+    if (row.has_phone) actions.append(whatsapp(row));
     else actions.append('Cadastre o WhatsApp do cliente para enviar a mensagem.');
     addAction(actions,row,'Confirmar pagamento','confirmed');
     addAction(actions,row,'Cancelar','cancelled');
   }
   if (row.status === 'confirmed') {
-    if (row.phone) actions.append(whatsapp(row));
+    if (row.has_phone) actions.append(whatsapp(row));
     else actions.append('Cadastre o WhatsApp do cliente para enviar a mensagem.');
     addAction(actions,row,'Cancelar reserva','cancelled');
   }
@@ -160,6 +157,7 @@ async function start() {
       location.reload();
     } catch (error) { message(error.message,true); }
   };
+  if (customerPage && !canManage) { message('Somente administradores podem acessar a base de clientes.',true); return; }
   $(customerPage ? '#customers' : '#reservations').hidden = false;
   if (customerPage) await loadCustomers();
   else await Promise.all([loadCustomers(),loadDates(),loadReservations()]);

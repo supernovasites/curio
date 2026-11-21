@@ -16,6 +16,7 @@ await copyFile('metricas.js','dist/metricas.js');
 const {readFile}=await import('node:fs/promises');
 const csv=await readFile('campanhas/csv.js','utf8');
 const worker=await readFile('server/worker.mjs','utf8');
-await writeFile('dist/_worker.js',csv.replaceAll('export function','function')+'\n'+worker.replace("import {normalizePhone} from '../campanhas/csv.js';",''));
+const age=await readFile('campanhas/age.js','utf8');
+await writeFile('dist/_worker.js',[csv,age,worker.replace(/^import .*;\r?\n/gm,'')].map(source=>source.replaceAll('export function','function')).join('\n'));
 await writeFile('dist/_routes.json',JSON.stringify({version:1,include:['/api/*',...['campanhas','painel','usuarios','mensagens','reserva','reservas','clientes'].flatMap(path=>['/'+path,'/'+path+'/*'])],exclude:[]}));
 console.log('Build concluído em dist. Nenhum dado pessoal ou credencial incluído.');

@@ -77,7 +77,7 @@ O painel administrativo apresenta a quantidade e o percentual por cidade/UF de t
 ## Clientes e reservas
 
 - O painel abre em Hoje, no fuso de Fortaleza. A taxa de WhatsApp divide os cliques no botão de reserva pelos acessos únicos. O painel também oferece Ontem e os períodos anteriores. A distribuição por cidade abre ao clicar no título.
-- Em `/clientes/`, a equipe pesquisa e edita toda a base, inclusive contatos importados. A listagem é paginada em ordem de nome e oferece intervalos de cadastro e nascimento.
+- Em `/clientes/`, administradores pesquisam e editam toda a base, inclusive contatos importados. A listagem é paginada em ordem de nome e oferece intervalos de cadastro e nascimento. A busca no módulo de reservas retorna apenas os campos necessários para vincular o cliente.
 - A disponibilidade mensal em `/reserva/` é pública. O cliente entra com CPF e data de nascimento para acessar a própria ficha e registrar intenções. Clientes novos informam esses dois dados no cadastro. Para dar acesso a contatos importados, a equipe associa o CPF e confere a data de nascimento na ficha.
 - Em `/reservas/`, o calendário inicia com as datas bloqueadas. Administradores liberam ou bloqueiam datas. A equipe pode vincular contatos cadastrados e analisar as intenções de uma data. Cada data comporta uma reserva aprovada ou confirmada. Intenções pendentes não ocupam a data.
 - Ao aprovar a intenção, a equipe registra os dados de pagamento e abre a mensagem preenchida no WhatsApp. O envio e a verificação do comprovante são manuais. Depois de confirmar o pagamento na plataforma, a equipe pode enviar a confirmação pelo WhatsApp.

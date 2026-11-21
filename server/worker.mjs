@@ -1,4 +1,5 @@
 import {normalizePhone} from '../campanhas/csv.js';
+import {ageOnDate} from '../campanhas/age.js';
 const enc = new TextEncoder();
 const statuses = ['nao_contatado', 'aguardando', 'interessado', 'sem_interesse', 'sem_resposta', 'reserva_realizada'];
 const hex = a => Array.from(new Uint8Array(a), b => b.toString(16).padStart(2, '0')).join('');
@@ -48,12 +49,12 @@ function readCpf(value) {
   return cpf;
 }
 
-async function customerLimit(db, keys, max) {
+async function customerLimit(db, key, max) {
   const now = Date.now();
-  const results = await db.batch(keys.map(key => db.prepare(
-    'INSERT INTO login_limits(key,attempts,expires_at) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN expires_at<=? THEN 1 ELSE attempts+1 END, expires_at=CASE WHEN expires_at<=? THEN excluded.expires_at ELSE expires_at END RETURNING attempts'
-  ).bind(key,now+900000,now,now)));
-  if (results.some(result => result.results[0].attempts > max)) fail(429,'Muitas tentativas. Aguarde 15 minutos.');
+  const row = await db.prepare(
+    'INSERT INTO login_limits(key,attempts,expires_at) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN expires_at<=? THEN 1 ELSE MIN(attempts+1,?) END, expires_at=CASE WHEN expires_at<=? THEN excluded.expires_at ELSE expires_at END RETURNING attempts'
+  ).bind(key,now+900000,now,max+1,now).first();
+  if (row.attempts > max) fail(429,'Muitas tentativas. Aguarde 15 minutos.');
 }
 
 function customerDetails(input) {
@@ -94,7 +95,7 @@ async function createReservation(db, contactId, day, userId = null) {
 }
 
 const customerCookie = (token, seconds) =>
-  'curio_customer_v2='+token+'; Path=/api/reserva; HttpOnly; Secure; SameSite=Strict; Max-Age='+seconds;
+  'curio_customer_v3='+token+'; Path=/api/reserva; HttpOnly; Secure; SameSite=Strict; Max-Age='+seconds;
 
 async function publicReservations(req, env, path) {
   const db = env.DB, method = req.method, now = Date.now();
@@ -106,27 +107,29 @@ async function publicReservations(req, env, path) {
   }
   if (method === 'POST' && ['/register','/login'].includes(path)) {
     const input = await body(req), ip = req.headers.get('CF-Connecting-IP') || 'local';
+    const registering = path === '/register';
+    await customerLimit(db,await sha('customer-ip:'+path+':'+ip),registering ? 8 : 40);
     const cpf = readCpf(input.cpf), birth = dateOnly(input.birth_date);
     if (!birth || birth !== input.birth_date || birth>localDay()) fail(400,'Informe a data de nascimento completa.');
-    const keys = await Promise.all([sha('customer-login-v2:ip:'+ip),sha('customer-login-v2:cpf:'+cpf)]);
-    await customerLimit(db,keys,10);
-    let contactId;
-    if (path === '/register') {
-      contactId = await createCustomer(db,{cpf,birth_date:birth},true);
-    } else {
-      const account = await db.prepare('SELECT a.contact_id FROM customer_accounts a JOIN contacts c ON c.id=a.contact_id WHERE a.cpf=? AND c.birth_date=? AND c.active=1').bind(cpf,birth).first();
-      if (!account) fail(401,'CPF ou data de nascimento inválidos. Se os dados estiverem corretos, confirme seu cadastro com a equipe.');
-      contactId = account.contact_id;
+    if (registering) {
+      try { await createCustomer(db,{cpf,birth_date:birth},true); }
+      catch (error) { if (error.status !== 409) throw error; }
+      return json({ok:true},202);
     }
-    const token = random(), seconds = 28800;
+    const accountKey = await sha('customer-account-v3:'+cpf);
+    await customerLimit(db,accountKey,5);
+    const account = await db.prepare('SELECT a.contact_id FROM customer_accounts a JOIN contacts c ON c.id=a.contact_id WHERE a.cpf=? AND c.birth_date=? AND c.active=1').bind(cpf,birth).first();
+    if (!account) fail(401,'CPF ou data de nascimento inválidos. Se os dados estiverem corretos, confirme seu cadastro com a equipe.');
+    const contactId = account.contact_id;
+    const token = random(), seconds = 3600;
     await db.batch([
       db.prepare('INSERT INTO customer_sessions VALUES(?,?,?)').bind(await sha(token),contactId,now+seconds*1000),
       db.prepare('DELETE FROM customer_sessions WHERE expires_at<=?').bind(now),
-      db.prepare('DELETE FROM login_limits WHERE key=? OR expires_at<=?').bind(keys[1],now)
+      db.prepare('DELETE FROM login_limits WHERE key=? OR expires_at<=?').bind(accountKey,now)
     ]);
-    return json({ok:true},path === '/register' ? 201 : 200,{'Set-Cookie':customerCookie(token,seconds)});
+    return json({ok:true},200,{'Set-Cookie':customerCookie(token,seconds)});
   }
-  const token = (req.headers.get('Cookie') || '').match(/(?:^|;\s*)curio_customer_v2=([a-f0-9]{64})(?:;|$)/)?.[1];
+  const token = (req.headers.get('Cookie') || '').match(/(?:^|;\s*)curio_customer_v3=([a-f0-9]{64})(?:;|$)/)?.[1];
   if (!token) fail(401,'Informe CPF e data de nascimento para acessar seu cadastro.');
   const tokenHash = await sha(token);
   const customer = await db.prepare('SELECT c.id,c.name,c.phone,c.city,c.state FROM customer_sessions s JOIN contacts c ON c.id=s.contact_id WHERE s.token_hash=? AND s.expires_at>? AND c.active=1').bind(tokenHash,now).first();
@@ -150,16 +153,19 @@ async function publicReservations(req, env, path) {
 
 async function manageReservations(req, db, path, user, audit) {
   const method = req.method;
-  if (path === '/customers/search' && method === 'POST') {
+  if ((path === '/customers' || path.startsWith('/customers/')) && user.role !== 'admin')
+    fail(403,'Somente administradores podem consultar ou alterar a base de clientes.');
+  const reservationSearch = path === '/reservations/customers';
+  if ((path === '/customers/search' || reservationSearch) && method === 'POST') {
     const input = await body(req), pageSize = 25;
     const fold = text => text.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
     const name = [...'áàâãäéèêëíìîïóòôõöúùûüç'].reduce((sql,letter) =>
       "replace(replace("+sql+",'"+letter+"','"+fold(letter)+"'),'"+letter.toUpperCase()+"','"+fold(letter)+"')", 'lower(c.name)');
     const args = [fold(clean(input.q,120))];
     let where = ' WHERE instr('+name+',?)>0';
-    if (input.activeOnly === true) where += ' AND c.active=1';
+    if (reservationSearch) where += ' AND c.active=1';
     for (const [field,column,op] of [['registeredFrom','registered_at','>='],['registeredTo','registered_at','<='],['birthFrom','birth_date','>='],['birthTo','birth_date','<=']]) {
-      if (!input[field]) continue;
+      if (reservationSearch || !input[field]) continue;
       const date = dateOnly(input[field]);
       if (!date) fail(400,'Confira as datas dos filtros.');
       where += ' AND c.'+column+"<>'' AND c."+column+op+'?';
@@ -168,8 +174,11 @@ async function manageReservations(req, db, path, user, audit) {
     const total = await db.prepare('SELECT COUNT(*) total FROM contacts c'+where).bind(...args).first();
     const pages = Math.max(1,Math.ceil(total.total/pageSize));
     const page = Math.min(pages,Math.max(1,Math.floor(Number(input.page)||1)));
-    const {results} = await db.prepare('SELECT c.id,c.name,c.phone,c.city,c.state,c.registered_at,c.birth_date,c.occupation,c.active,EXISTS(SELECT 1 FROM customer_accounts a WHERE a.contact_id=c.id) has_account FROM contacts c'+where+' ORDER BY '+name+',c.id LIMIT ? OFFSET ?')
+    const fields = reservationSearch ? 'c.id,c.name,c.city,c.state' :
+      'c.id,c.name,c.phone,c.city,c.state,c.registered_at,c.birth_date,c.occupation,c.active,EXISTS(SELECT 1 FROM customer_accounts a WHERE a.contact_id=c.id) has_account';
+    const {results} = await db.prepare('SELECT '+fields+' FROM contacts c'+where+' ORDER BY '+name+',c.id LIMIT ? OFFSET ?')
       .bind(...args,pageSize,(page-1)*pageSize).all();
+    await audit(user.id,reservationSearch?'buscou_cliente_reserva':'consultou_base_clientes','contacts');
     return json({rows:results,page,pages,total:total.total});
   }
   const customerMatch = path.match(/^\/customers\/([\w-]+)$/);
@@ -206,12 +215,23 @@ async function manageReservations(req, db, path, user, audit) {
     return json({ok:true});
   }
   if (path === '/reservations' && method === 'GET') {
-    const {results} = await db.prepare("SELECT r.id,r.day,r.status,r.payment,c.name,c.phone FROM reservations r JOIN contacts c ON c.id=r.contact_id ORDER BY (r.status='pending') DESC,r.day DESC,r.created_at DESC").all();
+    const {results} = await db.prepare("SELECT r.id,r.day,r.status,c.name,(c.phone<>'') has_phone FROM reservations r JOIN contacts c ON c.id=r.contact_id ORDER BY (r.status='pending') DESC,r.day DESC,r.created_at DESC").all();
     return json(results);
   }
   if (path === '/reservations' && method === 'POST') {
     const {day,customerId} = await body(req);
     return createReservation(db,clean(customerId,80),day,user.id);
+  }
+  const whatsapp = path.match(/^\/reservations\/([\w-]+)\/whatsapp$/);
+  if (whatsapp && method === 'GET') {
+    const row = await db.prepare("SELECT r.day,r.status,r.payment,c.name,c.phone FROM reservations r JOIN contacts c ON c.id=r.contact_id WHERE r.id=? AND r.status IN ('approved','confirmed')").bind(whatsapp[1]).first();
+    if (!row || !/^[1-9]\d{7,14}$/.test(row.phone)) fail(404,'WhatsApp da reserva indisponível.');
+    const day = row.day.split('-').reverse().join('/');
+    const message = row.status === 'confirmed'
+      ? 'Olá, '+row.name+'! Sua reserva na Fazenda Curió para '+day+' está confirmada.'
+      : 'Olá, '+row.name+'! Sua solicitação para '+day+' na Fazenda Curió foi aprovada.\n\nDados para pagamento:\n'+row.payment+'\n\nEnvie o comprovante por aqui para confirmarmos a reserva.';
+    await audit(user.id,'abriu_whatsapp_reserva',whatsapp[1]);
+    return new Response(null,{status:303,headers:{Location:'https://wa.me/'+row.phone+'?text='+encodeURIComponent(message)}});
   }
   const match = path.match(/^\/reservations\/([\w-]+)$/);
   if (match && method === 'PATCH') {
@@ -317,7 +337,7 @@ async function api(req, env, path) {
     const pageSize=10,pages=Math.ceil(total.total/pageSize),page=Math.min(requestedPage,Math.max(1,pages));
     const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.registered_at,c.occupation,c.birth_date,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.campaign_id,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.registered_at ASC,c.name COLLATE NOCASE,c.id LIMIT ? OFFSET ?').bind(...args,pageSize,(page-1)*pageSize).all();
     const first=rows.results.length?(page-1)*pageSize+1:0,last=first?first+rows.results.length-1:0;
-    return json({rows:rows.results,total:total.total,page,pages,page_size:pageSize,from:first,to:last,month:calendarParts.month});
+    return json({rows:rows.results.map(({birth_date,...row})=>({...row,age:ageOnDate(birth_date)})),total:total.total,page,pages,page_size:pageSize,from:first,to:last,month:calendarParts.month});
   }
   if(path==='/contact' && method==='GET') {
     const id=clean(new URL(req.url).searchParams.get('id'),80);
@@ -390,7 +410,7 @@ async function api(req, env, path) {
     if(status==='bloqueado') conditions.push('c.opted_out=1');
     const from=" FROM contacts c LEFT JOIN interactions i ON c.id=i.contact_id AND i.campaign_id=? WHERE "+conditions.join(' AND ');
     const total=await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first();
-    const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.registered_at,c.occupation,c.birth_date,c.active,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.registered_at ASC,c.name COLLATE NOCASE,c.id LIMIT 40 OFFSET ?').bind(...args,(page-1)*40).all();
+    const rows=await db.prepare("SELECT c.id,c.name,c.city,c.state,c.registered_at,c.occupation,c.active,c.opted_out,COALESCE(i.status,'nao_contatado') status,i.sent_at,COALESCE(i.notes,'') notes"+from+' ORDER BY c.registered_at ASC,c.name COLLATE NOCASE,c.id LIMIT 40 OFFSET ?').bind(...args,(page-1)*40).all();
     return json({rows:rows.results,total:total.total,page,pages:Math.ceil(total.total/40)});
   }
   const contactMatch=path.match(/^\/contacts\/([\w-]+)$/);
@@ -460,6 +480,8 @@ export default {
     headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','same-origin');headers.set('X-Frame-Options','DENY');
     if(['/campanhas','/painel','/usuarios','/mensagens','/clientes','/reservas','/reserva','/api/'].some(p=>path.startsWith(p))) {
       headers.set('Cache-Control','no-store');
+      headers.set('Referrer-Policy','no-referrer');
+      headers.set('X-Robots-Tag','noindex');
       headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://wa.me https://*.whatsapp.com");
     }
     return new Response(response.body,{status:response.status,headers});
