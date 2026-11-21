@@ -1,15 +1,16 @@
-import {$, api, formatDay, statuses, message, onSubmit, list, monthlyCalendar} from './common.js';
+import {$, api, weekendLabel, reservationLabel, statuses, message, onSubmit, list, monthlyCalendar} from './common.js';
 
 const reserve = (path,method,data) => api('/api/reserva',path,method,data);
-let dates = new Set(), selected = '', account = null;
+let dates = new Set(), selected = '', account = null, accountVersion = 0;
 const renderCalendar = monthlyCalendar($('#calendar'), day => ({
   label:dates.has(day) ? 'Disponível' : 'Indisponível',
   state:dates.has(day) ? 'available' : 'blocked',
-  disabled:!dates.has(day),selected:day===selected
+  disabled:!account || !dates.has(day),selected:day===selected
 }), day => { selected = day; showSelection(); });
 
 function showSelection() {
-  $('#selected-date').textContent = selected ? 'Data escolhida: '+formatDay(selected) : 'Escolha uma data disponível no calendário.';
+  $('#selected-date').textContent = !account ? 'Acesse sua reserva para selecionar um fim de semana.' :
+    selected ? 'Fim de semana escolhido: '+weekendLabel(selected) : 'Escolha um fim de semana disponível.';
   $('#request-button').disabled = !selected;
   $('#request-button').hidden = !account;
 }
@@ -22,17 +23,21 @@ async function loadDates() {
 }
 
 async function loadAccount() {
+  const version = ++accountVersion;
   let data;
   try { data = await reserve('/me'); }
   catch (error) { if (error.status !== 401) throw error; }
+  if (version !== accountVersion) return;
   account = data?.customer || null;
+  if (!account) selected = '';
   $('#access').hidden = Boolean(account);
   $('#account').hidden = !account;
+  renderCalendar();
   showSelection();
   if (!account) return;
   for (const key of ['name','phone','city','state']) $('#profile-form').elements[key].value = account[key] || '';
   list($('#requests'),data.reservations,(item,row) => {
-    item.textContent = formatDay(row.day)+' · '+statuses[row.status];
+    item.textContent = reservationLabel(row.day)+' · '+statuses[row.status];
   },'Você ainda não tem solicitações.');
 }
 
@@ -41,7 +46,7 @@ const details = $('#registration-fields');
 function showRegistration(show) {
   details.hidden = !show;
   details.disabled = !show;
-  $('#access-button').textContent = show ? 'Cadastrar e acessar' : 'Continuar';
+  $('#access-button').textContent = show ? 'Salvar cadastro' : 'Continuar';
 }
 for (const field of ['cpf','birth_date']) {
   access.elements[field].addEventListener('input',() => showRegistration(false));
@@ -65,7 +70,7 @@ onSubmit(access,async input => {
   access.reset();
   showRegistration(false);
   await loadAccount();
-  message(selected ? 'Data escolhida. Você já pode enviar a intenção de reserva.' : 'Escolha sua data no calendário.');
+  message(registering ? 'Cadastro salvo. Escolha um fim de semana disponível.' : 'Escolha seu fim de semana no calendário.');
 });
 onSubmit($('#profile-form'),async input => {
   await reserve('/me','PATCH',input);

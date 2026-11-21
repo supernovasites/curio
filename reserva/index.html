@@ -13,7 +13,7 @@
     <a href="/" class="brand"><img class="logo" src="/logo.jpg" alt=""><span>Fazenda Curió</span></a>
   </header>
   <main class="workspace">
-    <h1>Reserve sua data</h1>
+    <h1>Reserve seu fim de semana</h1>
     <p id="status" role="status">Carregando…</p>
     <section id="access" class="card" aria-labelledby="access-title">
       <h2 id="access-title">Acesse sua reserva</h2>
@@ -21,7 +21,6 @@
         <div class="reservation-form">
           <label>CPF <input name="cpf" inputmode="numeric" maxlength="14" required></label>
           <label>Data de nascimento <input name="birth_date" type="date" autocomplete="bday" required></label>
-          <button id="access-button" class="primary" type="submit">Continuar</button>
         </div>
         <fieldset id="registration-fields" hidden disabled>
           <legend>Complete seu cadastro</legend>
@@ -32,10 +31,11 @@
             <label>UF <input name="state" autocomplete="address-level1" maxlength="40"></label>
           </div>
         </fieldset>
+        <button id="access-button" class="primary" type="submit">Continuar</button>
       </form>
     </section>
     <section class="card">
-      <h2>Datas disponíveis</h2>
+      <h2>Fins de semana disponíveis</h2>
       <div id="calendar" aria-label="Calendário mensal de disponibilidade"></div>
       <p id="selected-date" role="status"></p>
       <form id="request-form"><button id="request-button" type="submit" hidden>Enviar intenção de reserva</button></form>

@@ -1,5 +1,8 @@
 export const $ = selector => document.querySelector(selector);
 export const formatDay = day => day.split('-').reverse().join('/');
+export const weekendEnd = friday => new Date(Date.parse(friday+'T12:00:00Z')+2*86400000).toISOString().slice(0,10);
+export const weekendLabel = friday => formatDay(friday)+' a '+formatDay(weekendEnd(friday));
+export const reservationLabel = day => new Date(day+'T12:00:00Z').getUTCDay()===5 ? weekendLabel(day) : formatDay(day);
 export const statuses = {
   pending:'Aguardando aprovação', approved:'Aguardando pagamento',
   confirmed:'Confirmada', rejected:'Recusada', cancelled:'Cancelada'
@@ -100,30 +103,24 @@ export function monthlyCalendar(root, describe, select) {
       button.setAttribute('aria-label',label.format(target));
     }
     grid.replaceChildren();
-    for (const weekday of ['Sexta','Sábado','Domingo']) {
-      const cell = document.createElement('strong');
-      cell.textContent = weekday;
-      grid.append(cell);
-    }
     const first = month.getUTCDay();
-    const padding = first===0 ? 2 : first===6 ? 1 : 0;
-    for (let i=0;i<padding;i++) grid.append(document.createElement('span'));
     const days = new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth()+1,0)).getUTCDate();
-    for (let i=1;i<=days;i++) {
-      const weekday = (first+i-1)%7;
-      if (weekday>=1 && weekday<=4) continue;
+    for (let i=1+(5-first+7)%7;i<=days;i+=7) {
       const date = month.toISOString().slice(0,8)+String(i).padStart(2,'0');
       const info = describe(date);
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'calendar-day '+info.state;
       button.disabled = info.disabled;
-      button.setAttribute('aria-label',formatDay(date)+' · '+info.label);
+      button.setAttribute('aria-label',weekendLabel(date)+' · Entrada sexta às 15h, saída domingo às 15h · '+info.label);
       button.setAttribute('aria-pressed',String(Boolean(info.selected)));
-      button.textContent = String(i);
+      const period = document.createElement('strong');
+      period.textContent = weekendLabel(date);
+      const hours = document.createElement('small');
+      hours.textContent = 'Entrada sex. 15h · Saída dom. 15h';
       const detail = document.createElement('small');
       detail.textContent = info.label;
-      button.append(detail);
+      button.append(period,hours,detail);
       button.onclick = () => { select(date); render(); };
       grid.append(button);
     }

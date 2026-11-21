@@ -13,23 +13,24 @@
 .reservation-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-block: .5rem; }
 .calendar-heading { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-block: 1rem; }
 .calendar-heading h3 { margin: 0; text-align: center; text-transform: capitalize; }
-.calendar-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .5rem; text-align: center; }
-.calendar-grid .calendar-day { min-height: 4rem; padding: .4rem; color: #23362a; background: #e9e6df; overflow-wrap: anywhere; line-height: 1.25; }
+.calendar-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%, 13rem),1fr)); gap: .5rem; text-align: center; }
+.calendar-grid .calendar-day { min-height: 5.25rem; padding: .65rem; color: #23362a; background: #e9e6df; overflow-wrap: anywhere; line-height: 1.25; }
 .calendar-grid small { display: block; font-size: .78rem; margin-top: .25rem; }
 .calendar-grid .available { background: #d9ead1; }
 .calendar-grid .booked { background: #f3dfb9; }
 .calendar-grid button[aria-pressed="true"] { outline: 2px solid #264e37; }
 .customer-editor summary { cursor: pointer; }
+#registration-fields { min-width: 0; margin: 0 0 .75rem; }
 @media (max-width: 520px) {
   .reservation-header { padding: .75rem 1rem; }
   .calendar-heading { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
   .calendar-heading h3 { grid-column: 1 / -1; grid-row: 1; }
   .calendar-heading button, .reservation-form button, #request-button { min-height: 44px; }
-  .calendar-grid { gap: .35rem; }
-  .calendar-grid .calendar-day { min-height: 3.5rem; }
+  .calendar-grid { grid-template-columns: 1fr; gap: .45rem; }
+  .calendar-grid .calendar-day { min-height: 4.75rem; }
   .reservation-form { align-items: stretch; }
   .reservation-form label, .reservation-form button { flex: 1 1 100%; min-width: 0; }
   .reservation-form input, .reservation-form select, .reservation-form textarea { min-width: 0; min-height: 44px; font-size: 16px; }
   #registration-fields { min-width: 0; margin-inline: 0; padding: .65rem; }
-  #request-button { width: 100%; }
+  #access-button, #request-button { width: 100%; min-height: 44px; }
 }

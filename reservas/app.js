@@ -1,5 +1,5 @@
 import {renderHeader} from '/campanhas/nav.js';
-import {$, api, formatDay, statuses, message, onSubmit, customerFields, options, list, monthlyCalendar, today} from '/reservar/common.js';
+import {$, api, weekendEnd, weekendLabel, reservationLabel, statuses, message, onSubmit, customerFields, options, list, monthlyCalendar, today} from '/reservar/common.js';
 
 const staff = (path,method,data) => api('/api/campanhas',path,method,data);
 const page = location.pathname.startsWith('/clientes') ? 'clientes' : 'reservas';
@@ -9,10 +9,11 @@ const newReservation = $('#new-reservation');
 let selected = '', calendarDates = new Map(), reservations = [], canManage = false;
 let filters = {}, customerPageNumber = 1, searchVersion = 0;
 const dateForm = $('#date-form');
+const onWeekend = (row,friday) => row.day>=friday && row.day<=weekendEnd(friday);
 const renderCalendar = monthlyCalendar($('#calendar'),day => {
   const calendarDate = calendarDates.get(day);
-  const booking = reservations.find(row=>row.day===day && ['approved','confirmed'].includes(row.status));
-  const requests = reservations.filter(row=>row.day===day && row.status==='pending').length;
+  const booking = reservations.find(row=>onWeekend(row,day) && ['approved','confirmed'].includes(row.status));
+  const requests = reservations.filter(row=>onWeekend(row,day) && row.status==='pending').length;
   const open = calendarDate?.open && day>=today();
   const label = booking ? 'Ocupada · '+booking.name : open ? 'Disponível' : 'Bloqueada';
   return {state:booking ? 'booked' : open ? 'available' : 'blocked',
@@ -20,14 +21,14 @@ const renderCalendar = monthlyCalendar($('#calendar'),day => {
 },day=>{ selected = day; renderSelected(); });
 
 function renderSelected() {
-  const available = selected && calendarDates.get(selected)?.open && !calendarDates.get(selected)?.booked && selected>=today();
-  $('#selected-date').textContent = selected ? 'Data selecionada: '+formatDay(selected) : 'Selecione uma data no calendário.';
+  const available = selected && calendarDates.get(selected)?.open && !calendarDates.get(selected)?.booked && !reservations.some(row=>onWeekend(row,selected) && ['approved','confirmed'].includes(row.status)) && selected>=today();
+  $('#selected-date').textContent = selected ? 'Fim de semana selecionado: '+weekendLabel(selected) : 'Selecione um fim de semana no calendário.';
   dateForm.elements.day.value = selected;
   dateForm.hidden = !canManage;
   for (const button of dateForm.querySelectorAll('button')) button.disabled = !selected || selected<today();
   newReservation.elements.day.value = selected;
   newReservation.querySelector('button').disabled = !available;
-  list($('#reservation-list'),selected ? reservations.filter(row=>row.day===selected) : reservations,renderReservation,'Nenhuma solicitação registrada.');
+  list($('#reservation-list'),selected ? reservations.filter(row=>onWeekend(row,selected)) : reservations,renderReservation,'Nenhuma solicitação registrada.');
 }
 
 function pager(element,data) {
@@ -107,7 +108,7 @@ function addAction(actions,row,label,status) {
 
 function renderReservation(item,row) {
   const label = document.createElement('strong');
-  label.textContent = formatDay(row.day)+' · '+row.name+' · '+statuses[row.status];
+  label.textContent = reservationLabel(row.day)+' · '+row.name+' · '+statuses[row.status];
   item.append(label);
   const actions = document.createElement('div');
   actions.className = 'reservation-actions';
@@ -178,7 +179,7 @@ onSubmit($('#reservation-search'),data => loadCustomers(data));
 onSubmit($('#date-form'),async ({day},button) => {
   await staff('/reservations/dates','POST',{day,open:button?.value !== 'close'});
   await loadDates();
-  message(button?.value === 'close' ? 'Data bloqueada.' : 'Data disponibilizada.');
+  message(button?.value === 'close' ? 'Fim de semana bloqueado.' : 'Fim de semana disponibilizado.');
 });
 onSubmit(newReservation,async data => {
   await staff('/reservations','POST',data);
