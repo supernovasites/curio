@@ -17,30 +17,38 @@
     <p id="status" role="status">Carregando…</p>
     <section class="card">
       <h2>Datas disponíveis</h2>
-      <form id="request-form" class="reservation-form">
-        <label>Escolha uma data <select name="day" required></select></label>
-        <button id="request-button" type="submit" hidden>Enviar intenção de reserva</button>
-      </form>
-      <p id="date-note"></p>
+      <div id="calendar" aria-label="Calendário mensal de disponibilidade"></div>
+      <p id="selected-date" role="status"></p>
+      <form id="request-form"><button id="request-button" type="submit" hidden>Enviar intenção de reserva</button></form>
     </section>
     <div id="access" class="reservation-columns">
       <section class="card">
-        <h2>Já tenho cadastro</h2>
+        <h2>Acessar meu cadastro</h2>
         <form id="login" class="reservation-form">
-          <label>CPF <input name="cpf" inputmode="numeric" autocomplete="username" maxlength="14" required></label>
-          <label>Senha <input name="password" type="password" autocomplete="current-password" required></label>
+          <label>CPF <input name="cpf" inputmode="numeric" maxlength="14" required></label>
+          <label>Data de nascimento <input name="birth_date" type="date" autocomplete="bday" required></label>
           <button type="submit">Entrar</button>
         </form>
       </section>
       <section class="card">
-        <h2>Criar cadastro</h2>
-        <form id="register" class="reservation-form"></form>
+        <h2>Criar meu cadastro</h2>
+        <form id="register" class="reservation-form">
+          <label>CPF <input name="cpf" inputmode="numeric" maxlength="14" required></label>
+          <label>Data de nascimento <input name="birth_date" type="date" autocomplete="bday" required></label>
+          <button type="submit">Cadastrar</button>
+        </form>
       </section>
     </div>
     <section id="account" class="card" hidden>
       <h2>Meu cadastro</h2>
-      <p id="profile"></p>
-      <button id="logout" class="secondary" type="button">Sair</button>
+      <form id="profile-form" class="reservation-form">
+        <label>Nome <input name="name" autocomplete="name" maxlength="120" required></label>
+        <label>WhatsApp <input name="phone" type="tel" autocomplete="tel" maxlength="24"></label>
+        <label>Cidade <input name="city" autocomplete="address-level2" maxlength="100"></label>
+        <label>UF <input name="state" autocomplete="address-level1" maxlength="40"></label>
+        <button type="submit">Salvar dados</button>
+      </form>
+      <button id="logout" class="secondary" type="button">Sair do cadastro</button>
       <h2>Minhas solicitações</h2>
       <ul id="requests" class="reservation-list"></ul>
     </section>

@@ -56,22 +56,28 @@ async function customerLimit(db, keys, max) {
   if (results.some(result => result.results[0].attempts > max)) fail(429,'Muitas tentativas. Aguarde 15 minutos.');
 }
 
-async function createCustomer(db, input) {
-  const cpf = readCpf(input.cpf), name = clean(input.name,120), city = clean(input.city,100);
-  const state = clean(input.state, 10).toUpperCase();
-  const phone = normalizePhone(clean(input.phone,40));
-  const password = typeof input.password === 'string' ? input.password : '';
-  if (!name || !phone || !city || !/^(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)$/.test(state))
-    fail(400,'Preencha nome, WhatsApp com DDD, cidade e UF.');
-  if (password.length < 8 || password.length > 256) fail(400,'Use uma senha entre 8 e 256 caracteres.');
-  const id = crypto.randomUUID(), passwordHash = await hashPassword(password);
+function customerDetails(input) {
+  const name = clean(input.name,120), city = clean(input.city,100), state = clean(input.state,40);
+  const rawPhone = clean(input.phone,40);
+  const phone = normalizePhone(rawPhone) || normalizePhone(rawPhone,'international');
+  const registered = dateOnly(input.registered_at), birth = dateOnly(input.birth_date);
+  if (!name || (rawPhone && !phone) || (input.registered_at && !registered) || (input.birth_date && (!birth || birth>localDay())))
+    fail(400,'Confira o nome, o telefone e as datas.');
+  return [name,phone,city,state,registered,birth,clean(input.occupation,120)];
+}
+
+async function createCustomer(db, input, publicRegistration = false) {
+  const cpf = publicRegistration || input.cpf ? readCpf(input.cpf) : null;
+  const id = crypto.randomUUID();
+  const details = publicRegistration ? ['Cliente do portal','','','',localDay(),input.birth_date,''] :
+    customerDetails({...input,registered_at:input.registered_at || localDay()});
+  const statements = [db.prepare('INSERT INTO contacts(name,phone,city,state,registered_at,birth_date,occupation,id,source_key) VALUES(?,?,?,?,?,?,?,?,?)').bind(...details,id,id)];
+  if (cpf) statements.push(db.prepare("INSERT INTO customer_accounts(contact_id,cpf,password_hash) VALUES(?,?,'')").bind(id,cpf));
   try {
-    await db.batch([
-      db.prepare('INSERT INTO contacts(id,name,phone,city,state,source_key,registered_at) VALUES(?,?,?,?,?,?,?)').bind(id,name,phone,city,state,id,localDay()),
-      db.prepare('INSERT INTO customer_accounts(contact_id,cpf,password_hash) VALUES(?,?,?)').bind(id,cpf,passwordHash)
-    ]);
+    await db.batch(statements);
   } catch (error) {
-    if (/UNIQUE constraint failed: customer_accounts.cpf/i.test(error.message)) fail(409,'Não foi possível cadastrar. Se já tem conta, entre com CPF e senha.');
+    if (/UNIQUE constraint failed: customer_accounts.cpf/i.test(error.message))
+      fail(409,'CPF já cadastrado. Use a opção de acesso ao cadastro.');
     throw error;
   }
   return id;
@@ -81,14 +87,14 @@ const availableDates = "SELECT d.day FROM reservation_dates d WHERE d.open=1 AND
 async function createReservation(db, contactId, day, userId = null) {
   if (!dateOnly(day) || day.length !== 10 || day < localDay()) fail(400,'Selecione uma data válida.');
   const id = crypto.randomUUID();
-  const result = await db.prepare("INSERT INTO reservations(id,day,contact_id,status,updated_by) SELECT ?,d.day,c.contact_id,'pending',? FROM ("+availableDates+") d CROSS JOIN customer_accounts c JOIN contacts p ON p.id=c.contact_id AND p.active=1 WHERE d.day=? AND c.contact_id=? ON CONFLICT DO NOTHING")
+  const result = await db.prepare("INSERT INTO reservations(id,day,contact_id,status,updated_by) SELECT ?,d.day,c.id,'pending',? FROM ("+availableDates+") d CROSS JOIN contacts c WHERE d.day=? AND c.id=? AND c.active=1 ON CONFLICT DO NOTHING")
     .bind(id,userId,localDay(),day,contactId).run();
   if (!result.meta.changes) fail(409,'Data indisponível, cliente inativo ou já existe um pedido para esta data.');
   return json({id},201);
 }
 
 const customerCookie = (token, seconds) =>
-  'curio_customer='+token+'; Path=/api/reserva; HttpOnly; Secure; SameSite=Strict; Max-Age='+seconds;
+  'curio_customer_v2='+token+'; Path=/api/reserva; HttpOnly; Secure; SameSite=Strict; Max-Age='+seconds;
 
 async function publicReservations(req, env, path) {
   const db = env.DB, method = req.method, now = Date.now();
@@ -99,35 +105,40 @@ async function publicReservations(req, env, path) {
     return json(results.map(row => row.day));
   }
   if (method === 'POST' && ['/register','/login'].includes(path)) {
-    const input = await body(req), cpf = readCpf(input.cpf);
-    const ip = req.headers.get('CF-Connecting-IP') || 'local';
-    if (path === '/register') {
-      await customerLimit(db,[await sha('customer-register:'+ip)],10);
-      await createCustomer(db,input);
-      return json({ok:true},201);
-    }
-    const keys = await Promise.all([sha('customer-login:ip:'+ip),sha('customer-login:cpf:'+cpf)]);
+    const input = await body(req), ip = req.headers.get('CF-Connecting-IP') || 'local';
+    const cpf = readCpf(input.cpf), birth = dateOnly(input.birth_date);
+    if (!birth || birth !== input.birth_date || birth>localDay()) fail(400,'Informe a data de nascimento completa.');
+    const keys = await Promise.all([sha('customer-login-v2:ip:'+ip),sha('customer-login-v2:cpf:'+cpf)]);
     await customerLimit(db,keys,10);
-    const account = await db.prepare('SELECT a.contact_id,a.password_hash,c.active FROM customer_accounts a JOIN contacts c ON c.id=a.contact_id WHERE a.cpf=?').bind(cpf).first();
-    const password = typeof input.password === 'string' && input.password.length <= 256 ? input.password : '';
-    const valid = await verify(password,account?.password_hash || 'pbkdf2$100000$dummy$'+'0'.repeat(64));
-    if (!account?.active || !valid) fail(401,'CPF ou senha inválidos.');
-    const token = random();
+    let contactId;
+    if (path === '/register') {
+      contactId = await createCustomer(db,{cpf,birth_date:birth},true);
+    } else {
+      const account = await db.prepare('SELECT a.contact_id FROM customer_accounts a JOIN contacts c ON c.id=a.contact_id WHERE a.cpf=? AND c.birth_date=? AND c.active=1').bind(cpf,birth).first();
+      if (!account) fail(401,'CPF ou data de nascimento inválidos. Se os dados estiverem corretos, confirme seu cadastro com a equipe.');
+      contactId = account.contact_id;
+    }
+    const token = random(), seconds = 28800;
     await db.batch([
-      db.prepare('INSERT INTO customer_sessions VALUES(?,?,?)').bind(await sha(token),account.contact_id,now+28800000),
+      db.prepare('INSERT INTO customer_sessions VALUES(?,?,?)').bind(await sha(token),contactId,now+seconds*1000),
       db.prepare('DELETE FROM customer_sessions WHERE expires_at<=?').bind(now),
       db.prepare('DELETE FROM login_limits WHERE key=? OR expires_at<=?').bind(keys[1],now)
     ]);
-    return json({ok:true},200,{'Set-Cookie':customerCookie(token,28800)});
+    return json({ok:true},path === '/register' ? 201 : 200,{'Set-Cookie':customerCookie(token,seconds)});
   }
-  const token = (req.headers.get('Cookie') || '').match(/(?:^|;\s*)curio_customer=([a-f0-9]{64})(?:;|$)/)?.[1];
-  if (!token) fail(401,'Entre com CPF e senha.');
+  const token = (req.headers.get('Cookie') || '').match(/(?:^|;\s*)curio_customer_v2=([a-f0-9]{64})(?:;|$)/)?.[1];
+  if (!token) fail(401,'Informe CPF e data de nascimento para acessar seu cadastro.');
   const tokenHash = await sha(token);
   const customer = await db.prepare('SELECT c.id,c.name,c.phone,c.city,c.state FROM customer_sessions s JOIN contacts c ON c.id=s.contact_id WHERE s.token_hash=? AND s.expires_at>? AND c.active=1').bind(tokenHash,now).first();
-  if (!customer) fail(401,'Entre com CPF e senha.');
+  if (!customer) fail(401,'Informe CPF e data de nascimento para acessar seu cadastro.');
   if (path === '/me' && method === 'GET') {
     const {results} = await db.prepare('SELECT id,day,status FROM reservations WHERE contact_id=? ORDER BY day DESC,created_at DESC').bind(customer.id).all();
     return json({customer,reservations:results});
+  }
+  if (path === '/me' && method === 'PATCH') {
+    const [name,phone,city,state] = customerDetails(await body(req));
+    await db.prepare('UPDATE contacts SET name=?,phone=?,city=?,state=? WHERE id=? AND active=1').bind(name,phone,city,state,customer.id).run();
+    return json({ok:true});
   }
   if (path === '/requests' && method === 'POST') return createReservation(db,customer.id,(await body(req)).day);
   if (path === '/logout' && method === 'POST') {
@@ -140,10 +151,42 @@ async function publicReservations(req, env, path) {
 async function manageReservations(req, db, path, user, audit) {
   const method = req.method;
   if (path === '/customers/search' && method === 'POST') {
-    const q = clean((await body(req)).q,100);
-    const {results} = await db.prepare("SELECT c.id,c.name,c.phone,c.city,c.state FROM customer_accounts a JOIN contacts c ON c.id=a.contact_id WHERE c.active=1 AND (?='' OR instr(lower(c.name),lower(?))>0 OR a.cpf=?) ORDER BY c.name LIMIT 100")
-      .bind(q,q,q.replace(/[.\s-]/g,'')).all();
-    return json(results);
+    const input = await body(req), pageSize = 25;
+    const fold = text => text.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
+    const name = [...'áàâãäéèêëíìîïóòôõöúùûüç'].reduce((sql,letter) =>
+      "replace(replace("+sql+",'"+letter+"','"+fold(letter)+"'),'"+letter.toUpperCase()+"','"+fold(letter)+"')", 'lower(c.name)');
+    const args = [fold(clean(input.q,120))];
+    let where = ' WHERE instr('+name+',?)>0';
+    if (input.activeOnly === true) where += ' AND c.active=1';
+    for (const [field,column,op] of [['registeredFrom','registered_at','>='],['registeredTo','registered_at','<='],['birthFrom','birth_date','>='],['birthTo','birth_date','<=']]) {
+      if (!input[field]) continue;
+      const date = dateOnly(input[field]);
+      if (!date) fail(400,'Confira as datas dos filtros.');
+      where += ' AND c.'+column+"<>'' AND c."+column+op+'?';
+      args.push(date);
+    }
+    const total = await db.prepare('SELECT COUNT(*) total FROM contacts c'+where).bind(...args).first();
+    const pages = Math.max(1,Math.ceil(total.total/pageSize));
+    const page = Math.min(pages,Math.max(1,Math.floor(Number(input.page)||1)));
+    const {results} = await db.prepare('SELECT c.id,c.name,c.phone,c.city,c.state,c.registered_at,c.birth_date,c.occupation,c.active,EXISTS(SELECT 1 FROM customer_accounts a WHERE a.contact_id=c.id) has_account FROM contacts c'+where+' ORDER BY '+name+',c.id LIMIT ? OFFSET ?')
+      .bind(...args,pageSize,(page-1)*pageSize).all();
+    return json({rows:results,page,pages,total:total.total});
+  }
+  const customerMatch = path.match(/^\/customers\/([\w-]+)$/);
+  if (customerMatch && method === 'PATCH') {
+    const input = await body(req), id = customerMatch[1];
+    const details = customerDetails(input), contact = await db.prepare('SELECT id FROM contacts WHERE id=?').bind(id).first();
+    if (!contact) fail(404,'Cliente não encontrado.');
+    const statements = [db.prepare('UPDATE contacts SET name=?,phone=?,city=?,state=?,registered_at=?,birth_date=?,occupation=? WHERE id=?').bind(...details,id)];
+    if (input.cpf) statements.push(db.prepare("INSERT INTO customer_accounts(contact_id,cpf,password_hash) VALUES(?,?,'') ON CONFLICT(contact_id) DO NOTHING").bind(id,readCpf(input.cpf)));
+    statements.unshift(db.prepare('DELETE FROM customer_sessions WHERE contact_id=? AND EXISTS(SELECT 1 FROM contacts WHERE id=? AND birth_date<>?)').bind(id,id,details[5]));
+    try { await db.batch(statements); }
+    catch (error) {
+      if (/UNIQUE constraint failed: customer_accounts.cpf/i.test(error.message)) fail(409,'CPF já associado a outro cliente.');
+      throw error;
+    }
+    await audit(user.id,'editou_cliente',id);
+    return json({ok:true});
   }
   if (path === '/customers' && method === 'POST') {
     const id = await createCustomer(db,await body(req));
@@ -151,10 +194,11 @@ async function manageReservations(req, db, path, user, audit) {
     return json({id},201);
   }
   if (path === '/reservations/dates' && method === 'GET') {
-    const {results} = await db.prepare("SELECT d.day,d.open,EXISTS(SELECT 1 FROM reservations r WHERE r.day=d.day AND r.status IN ('approved','confirmed')) booked FROM reservation_dates d WHERE d.day>=? ORDER BY d.day").bind(localDay()).all();
+    const {results} = await db.prepare("SELECT d.day,d.open,EXISTS(SELECT 1 FROM reservations r WHERE r.day=d.day AND r.status IN ('approved','confirmed')) booked FROM reservation_dates d ORDER BY d.day").all();
     return json(results);
   }
   if (path === '/reservations/dates' && method === 'POST') {
+    if (user.role !== 'admin') fail(403,'Somente administradores podem alterar a disponibilidade.');
     const {day,open} = await body(req);
     if (!dateOnly(day) || day.length !== 10 || day < localDay() || typeof open !== 'boolean') fail(400,'Informe uma data a partir de hoje.');
     await db.prepare('INSERT INTO reservation_dates(day,open) VALUES(?,?) ON CONFLICT(day) DO UPDATE SET open=excluded.open').bind(day,Number(open)).run();
@@ -218,7 +262,7 @@ async function api(req, env, path) {
   const user=await db.prepare('SELECT u.id,u.username,u.name,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.active=1').bind(tokenHash,now).first();
   if(!user) fail(401,'Entre para acessar a plataforma.');
   if(path==='/me' && method==='GET') return json(user);
-  if(path==='/customers' || path==='/customers/search' || path==='/reservations' || path.startsWith('/reservations/'))
+  if(path==='/customers' || path.startsWith('/customers/') || path==='/reservations' || path.startsWith('/reservations/'))
     return manageReservations(req,db,path,user,audit);
   if(path==='/base-cities' && method==='GET'){
     if(user.role!=='admin')fail(403,'Somente administradores podem acessar os dados da base.');

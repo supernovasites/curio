@@ -29,33 +29,39 @@
       <section class="card">
         <h2>Clientes cadastrados</h2>
         <form id="customer-search" class="reservation-form">
-          <label>Buscar por nome ou CPF <input name="q" type="search"></label>
-          <button class="secondary" type="submit">Buscar</button>
+          <label>Buscar por nome <input name="q" type="search"></label>
+          <label>Cadastro a partir de <input name="registeredFrom" type="date"></label>
+          <label>Cadastro até <input name="registeredTo" type="date"></label>
+          <label>Nascimento a partir de <input name="birthFrom" type="date"></label>
+          <label>Nascimento até <input name="birthTo" type="date"></label>
+          <button class="secondary" type="submit">Filtrar</button>
+          <button class="secondary" type="reset">Limpar filtros</button>
         </form>
-        <ul id="customer-list" class="reservation-list"></ul>
+        <ul id="customer-list" class="reservation-list"></ul><div id="customer-pages" class="pagination"></div>
       </section>
     </section>
     <section id="reservations" hidden>
       <h1>Gestão de reservas</h1>
       <p><a href="/reserva/">Abrir página de reservas dos clientes</a></p>
       <section class="card">
-        <h2>Disponibilidade</h2>
+        <h2>Disponibilidade do mês</h2><div id="calendar" aria-label="Calendário mensal de gestão"></div><p id="selected-date" role="status"></p>
         <form id="date-form" class="reservation-form">
-          <label>Data <input name="day" type="date" required></label>
+          <input name="day" type="hidden">
           <button type="submit" value="open">Disponibilizar data</button>
           <button type="submit" value="close" class="secondary">Bloquear data</button>
         </form>
-        <ul id="date-list" class="reservation-list"></ul>
+
       </section>
       <section class="card">
         <h2>Registrar intenção de reserva</h2>
         <form id="reservation-search" class="reservation-form">
-          <label>Buscar cliente por nome ou CPF <input name="q" type="search"></label>
+          <label>Buscar cliente por nome <input name="q" type="search"></label>
           <button class="secondary" type="submit">Buscar cliente</button>
         </form>
+        <div id="reservation-pages" class="pagination"></div>
         <form id="new-reservation" class="reservation-form">
           <label>Cliente <select name="customerId" required></select></label>
-          <label>Data disponível <select name="day" required></select></label>
+          <input name="day" type="hidden">
           <button type="submit">Registrar intenção</button>
         </form>
       </section>

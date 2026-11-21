@@ -135,10 +135,10 @@ test('public and staff reservations share dates, accounts and approval state',as
   t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,10,21,15)});
   const sqlite = new DatabaseSync(':memory:');
   t.after(()=>sqlite.close());
-  for (const file of ['0001_campanhas','0003_contact_details','0004_reserva_realizada','0006_reservations'])
+  for (const file of ['0001_campanhas','0003_contact_details','0004_reserva_realizada','0006_reservations','0007_customer_directory'])
     sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
   sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)')
-    .run('staff','staff','Equipe',await hashPassword('password-test'),'operador');
+    .run('staff','staff','Equipe',await hashPassword('password-test'),'admin');
   const env = {DB:adapter(sqlite)};
   const call = (path,method='GET',input,session) => worker.fetch(new Request('https://curio.test/api'+path,{
     method,headers:{Origin:'https://curio.test','Content-Type':'application/json',...(session?{Cookie:session}:{})},
@@ -151,13 +151,16 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal((await call('/campanhas/reservations/dates','POST',{day,open:true},staff)).status,200);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[day]);
   assert.equal((await call('/reserva/requests','POST',{day})).status,401);
-  const input = {cpf:'529.982.247-25',password:'customer-test',name:'Cliente de teste',city:'Belém',state:'PA',phone:'91999991234'};
-  assert.equal((await call('/reserva/register','POST',input)).status,201);
+  const input = {cpf:'529.982.247-25',birth_date:'1989-01-03',name:'Cliente de teste',city:'Belém',state:'PA',phone:'91999991234'};
+  const registration = await call('/reserva/register','POST',{cpf:input.cpf,birth_date:input.birth_date});
+  assert.equal(registration.status,201);
+  const customer = session(registration);
+  assert.equal((await call('/reserva/me','PATCH',input,customer)).status,200);
   assert.equal((await call('/reserva/register','POST',input)).status,409);
   assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM contacts').get().count,1);
   const queue = await (await call('/campanhas/queue?group=principal','GET',null,staff)).json();
   assert.equal(queue.total,1);
-  const customer = session(await call('/reserva/login','POST',{cpf:input.cpf,password:input.password}));
+  assert.equal((await call('/reserva/me')).status,401);
   const profile = await (await call('/reserva/me','GET',null,customer)).json();
   assert.equal(profile.customer.name,input.name);
   assert.equal(profile.customer.cpf,undefined);
@@ -166,10 +169,15 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal(request.status,201);
   const {id} = await request.json();
   assert.equal((await call('/reserva/requests','POST',{day},customer)).status,409);
-  const other = {...input,cpf:'11144477735',name:'Outra pessoa'};
+  const other = {name:'Ágata Importada',phone:input.phone,birth_date:'1990-04-11',registered_at:'2023-11-10'};
   const created = await call('/campanhas/customers','POST',other,staff);
   assert.equal(created.status,201);
   const {id:customerId} = await created.json();
+  const directory = await (await call('/campanhas/customers/search','POST',{},staff)).json();
+  assert.deepEqual(directory.rows.map(row=>row.name),['Ágata Importada','Cliente de teste']);
+  const filtered = await (await call('/campanhas/customers/search','POST',{q:'agata',birthFrom:'1990-01-01',registeredTo:'2023-12-01'},staff)).json();
+  assert.equal(filtered.total,1);
+  assert.equal(filtered.rows[0].has_account,0);
   const linked = await call('/campanhas/reservations','POST',{day,customerId},staff);
   assert.equal(linked.status,201);
   const {id:otherId} = await linked.json();
@@ -182,6 +190,13 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.deepEqual(confirmed.reservations,[{id,day,status:'confirmed'}]);
   assert.equal((await call('/campanhas/reservations/'+id,'PATCH',{status:'cancelled'},staff)).status,200);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[day]);
+  assert.equal((await call('/campanhas/customers/'+customerId,'PATCH',{...other,name:'Ágata Editada',cpf:'11144477735'},staff)).status,200);
+  assert.equal((await call('/reserva/login','POST',{cpf:'11144477735',birth_date:'1990-04-12'})).status,401);
+  const newSession = await call('/reserva/login','POST',{cpf:'11144477735',birth_date:other.birth_date});
+  assert.equal(newSession.status,200);
+  const otherProfile = await (await call('/reserva/me','GET',null,session(newSession))).json();
+  assert.equal(otherProfile.customer.name,'Ágata Editada');
+  assert.deepEqual(otherProfile.reservations.map(row=>row.id),[otherId]);
   await call('/reserva/logout','POST',{},customer);
   assert.equal((await call('/reserva/me','GET',null,customer)).status,401);
 });

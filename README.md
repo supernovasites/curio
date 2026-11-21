@@ -77,7 +77,8 @@ O painel administrativo apresenta a quantidade e o percentual por cidade/UF de t
 ## Clientes e reservas
 
 - O painel abre em Hoje, no fuso de Fortaleza. A taxa de WhatsApp divide os cliques no botão de reserva pelos acessos únicos. O painel também oferece Ontem e os períodos anteriores. A distribuição por cidade abre ao clicar no título.
-- A equipe cadastra clientes em `/clientes/`. Clientes também podem criar conta em `/reserva/` e acessar o próprio cadastro com CPF e senha. Novos cadastros entram na base de contatos das campanhas. Cadastros antigos importados por CSV continuam na base de campanhas.
-- Em `/reservas/`, administradores e operadores liberam ou bloqueiam datas, vinculam clientes cadastrados e analisam as intenções. Cada data comporta uma reserva aprovada ou confirmada. Intenções pendentes não ocupam a data.
+- Em `/clientes/`, a equipe pesquisa e edita toda a base, inclusive contatos importados. A listagem é paginada em ordem de nome e oferece intervalos de cadastro e nascimento.
+- A disponibilidade mensal em `/reserva/` é pública. O cliente entra com CPF e data de nascimento para acessar a própria ficha e registrar intenções. Clientes novos informam esses dois dados no cadastro. Para dar acesso a contatos importados, a equipe associa o CPF e confere a data de nascimento na ficha.
+- Em `/reservas/`, o calendário inicia com as datas bloqueadas. Administradores liberam ou bloqueiam datas. A equipe pode vincular contatos cadastrados e analisar as intenções de uma data. Cada data comporta uma reserva aprovada ou confirmada. Intenções pendentes não ocupam a data.
 - Ao aprovar a intenção, a equipe registra os dados de pagamento e abre a mensagem preenchida no WhatsApp. O envio e a verificação do comprovante são manuais. Depois de confirmar o pagamento na plataforma, a equipe pode enviar a confirmação pelo WhatsApp.
-- Aplique `migrations/0006_reservations.sql` ao banco D1 antes de publicar esta versão.
+- Aplique as migrações `0006_reservations.sql` e `0007_customer_directory.sql` ao banco D1 na ordem, conforme as versões já aplicadas.

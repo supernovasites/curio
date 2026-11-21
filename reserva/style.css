@@ -11,3 +11,13 @@
 .reservation-list { list-style: none; padding: 0; }
 .reservation-list > li { padding: .75rem 0; border-top: 1px solid #ddd; }
 .reservation-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-block: .5rem; }
+.calendar-heading { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-block: 1rem; }
+.calendar-heading h3 { margin: 0; text-align: center; text-transform: capitalize; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: .25rem; text-align: center; }
+.calendar-grid .calendar-day { min-height: 4rem; padding: .25rem; color: #23362a; background: #e9e6df; overflow-wrap: anywhere; line-height: 1.15; }
+.calendar-grid small { display: block; font-size: .72rem; margin-top: .25rem; }
+.calendar-grid .available { background: #d9ead1; }
+.calendar-grid .booked { background: #f3dfb9; }
+.calendar-grid button[aria-pressed="true"] { outline: 2px solid #264e37; }
+.customer-editor summary { cursor: pointer; }
+@media (max-width: 520px) { .calendar-grid small { font-size: .6rem; } .calendar-grid { gap: .14rem; } }

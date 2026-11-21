@@ -1,28 +1,85 @@
 import {renderHeader} from '/campanhas/nav.js';
-import {$, api, formatDay, statuses, message, onSubmit, customerFields, options, list} from '/reserva/common.js';
+import {$, api, formatDay, statuses, message, onSubmit, customerFields, options, list, monthlyCalendar, today} from '/reserva/common.js';
 
 const staff = (path,method,data) => api('/api/campanhas',path,method,data);
 const page = location.pathname.startsWith('/clientes') ? 'clientes' : 'reservas';
 const customerPage = page === 'clientes';
 const newReservation = $('#new-reservation');
 
-async function loadCustomers(q = '') {
-  const rows = await staff('/customers/search','POST',{q});
+let selected = '', calendarDates = new Map(), reservations = [], canManage = false;
+let filters = {}, customerPageNumber = 1, searchVersion = 0;
+const dateForm = $('#date-form');
+const renderCalendar = monthlyCalendar($('#calendar'),day => {
+  const calendarDate = calendarDates.get(day);
+  const booking = reservations.find(row=>row.day===day && ['approved','confirmed'].includes(row.status));
+  const requests = reservations.filter(row=>row.day===day && row.status==='pending').length;
+  const open = calendarDate?.open && day>=today();
+  const label = booking ? 'Ocupada · '+booking.name : open ? 'Disponível' : 'Bloqueada';
+  return {state:booking ? 'booked' : open ? 'available' : 'blocked',
+    label:label+(requests ? ' · '+requests+' pendente(s)' : ''), selected:day===selected};
+},day=>{ selected = day; renderSelected(); });
+
+function renderSelected() {
+  const available = selected && calendarDates.get(selected)?.open && !calendarDates.get(selected)?.booked && selected>=today();
+  $('#selected-date').textContent = selected ? 'Data selecionada: '+formatDay(selected) : 'Selecione uma data no calendário.';
+  dateForm.elements.day.value = selected;
+  dateForm.hidden = !canManage;
+  for (const button of dateForm.querySelectorAll('button')) button.disabled = !selected || selected<today();
+  newReservation.elements.day.value = selected;
+  newReservation.querySelector('button').disabled = !available;
+  list($('#reservation-list'),selected ? reservations.filter(row=>row.day===selected) : reservations,renderReservation,'Nenhuma solicitação registrada.');
+}
+
+function pager(element,data) {
+  const controls = [-1,1].map(step=>{
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'secondary';
+    button.textContent = step<0 ? 'Anterior' : 'Próxima';
+    button.disabled = step<0 ? data.page===1 : data.page===data.pages;
+    button.onclick = () => loadCustomers(filters,data.page+step).catch(error=>message(error.message,true));
+    return button;
+  });
+  const summary = document.createElement('span');
+  summary.textContent = data.total+' cliente(s) · página '+data.page+' de '+data.pages;
+  element.replaceChildren(controls[0],summary,controls[1]);
+}
+
+function renderCustomer(item,row) {
+  const details = document.createElement('details');
+  details.className = 'customer-editor';
+  const summary = document.createElement('summary');
+  summary.textContent = row.name+(row.active ? '' : ' · Inativo');
+  const form = document.createElement('form');
+  form.className = 'reservation-form';
+  customerFields(form,row);
+  onSubmit(form,async data => {
+    await staff('/customers/'+row.id,'PATCH',data);
+    await loadCustomers(filters,customerPageNumber);
+    message('Cadastro atualizado.');
+  });
+  details.append(summary,form);
+  item.append(details);
+}
+
+async function loadCustomers(input = {}, page = 1) {
+  const version = ++searchVersion;
+  const data = await staff('/customers/search','POST',{...input,page,activeOnly:!customerPage});
+  if (version!==searchVersion) return;
+  filters = input; customerPageNumber = data.page;
   if (customerPage) {
-    list($('#customer-list'),rows,(item,row) => {
-      item.textContent = [row.name,row.city+' / '+row.state,'+'+row.phone].join(' · ');
-    },'Nenhum cliente encontrado.');
+    list($('#customer-list'),data.rows,renderCustomer,'Nenhum cliente encontrado.');
+    pager($('#customer-pages'),data);
   } else {
-    options(newReservation.elements.customerId,rows.map(row => [row.id,row.name+' · +'+row.phone]),'Selecione o cliente');
+    options(newReservation.elements.customerId,data.rows.map(row => [row.id,row.name+(row.phone ? ' · +'+row.phone : '')]),'Selecione o cliente');
+    pager($('#reservation-pages'),data);
   }
 }
 
 async function loadDates() {
   const rows = await staff('/reservations/dates');
-  list($('#date-list'),rows,(item,row) => {
-    item.textContent = formatDay(row.day)+' · '+(row.booked ? 'Ocupada' : row.open ? 'Disponível' : 'Bloqueada');
-  },'Nenhuma data configurada.');
-  options(newReservation.elements.day,rows.filter(row => row.open && !row.booked).map(row => [row.day,formatDay(row.day)]),'Selecione a data');
+  calendarDates = new Map(rows.map(row=>[row.day,row]));
+  renderCalendar();
+  renderSelected();
 }
 
 function whatsapp(row) {
@@ -67,18 +124,22 @@ function renderReservation(item,row) {
     addAction(actions,row,'Recusar','rejected');
   }
   if (row.status === 'approved') {
-    actions.append(whatsapp(row));
+    if (row.phone) actions.append(whatsapp(row));
+    else actions.append('Cadastre o WhatsApp do cliente para enviar a mensagem.');
     addAction(actions,row,'Confirmar pagamento','confirmed');
     addAction(actions,row,'Cancelar','cancelled');
   }
   if (row.status === 'confirmed') {
-    actions.append(whatsapp(row));
+    if (row.phone) actions.append(whatsapp(row));
+    else actions.append('Cadastre o WhatsApp do cliente para enviar a mensagem.');
     addAction(actions,row,'Cancelar reserva','cancelled');
   }
 }
 
 async function loadReservations() {
-  list($('#reservation-list'),await staff('/reservations'),renderReservation,'Nenhuma solicitação registrada.');
+  reservations = await staff('/reservations');
+  renderCalendar();
+  renderSelected();
 }
 
 async function changeReservation(row,status,payment) {
@@ -89,6 +150,7 @@ async function changeReservation(row,status,payment) {
 
 async function start() {
   const user = await staff('/me');
+  canManage = user.role === 'admin';
   renderHeader(user,page);
   $('.app-header').hidden = false;
   $('#signin').hidden = true;
@@ -112,8 +174,9 @@ onSubmit($('#customer-form'),async data => {
   await loadCustomers();
   message('Cliente cadastrado e disponível na base de campanhas.');
 });
-onSubmit($('#customer-search'),({q}) => loadCustomers(q));
-onSubmit($('#reservation-search'),({q}) => loadCustomers(q));
+onSubmit($('#customer-search'),data => loadCustomers(data));
+$('#customer-search').onreset = () => loadCustomers().catch(error=>message(error.message,true));
+onSubmit($('#reservation-search'),data => loadCustomers(data));
 onSubmit($('#date-form'),async ({day},button) => {
   await staff('/reservations/dates','POST',{day,open:button?.value !== 'close'});
   await loadDates();
