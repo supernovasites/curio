@@ -147,6 +147,9 @@ test('public and staff reservations share dates, accounts and approval state',as
   const session = response => response.headers.get('Set-Cookie').split(';')[0];
   const staff = session(await call('/campanhas/login','POST',{username:'staff',password:'password-test'}));
   const day = '2026-11-22';
+  const weekday = '2026-11-23';
+  assert.equal((await call('/campanhas/reservations/dates','POST',{day:weekday,open:true},staff)).status,400);
+  sqlite.prepare('INSERT INTO reservation_dates(day,open) VALUES(?,1)').run(weekday);
   assert.equal((await call('/campanhas/reservations/dates','POST',{day,open:true})).status,401);
   assert.equal((await call('/campanhas/reservations/dates','POST',{day,open:true},staff)).status,200);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[day]);
@@ -158,6 +161,7 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal(registration.status,202);
   assert.equal(registration.headers.get('Set-Cookie'),null);
   const customer = session(await call('/reserva/login','POST',{cpf:input.cpf,birth_date:input.birth_date}));
+  assert.equal((await call('/reserva/requests','POST',{day:weekday},customer)).status,400);
   assert.equal((await (await call('/reserva/me','GET',null,customer)).json()).customer.phone,'5591999991234');
   const duplicate = await call('/reserva/register','POST',{...input,name:'Nome diferente'});
   assert.equal(duplicate.status,registration.status);

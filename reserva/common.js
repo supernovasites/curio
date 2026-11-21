@@ -74,33 +74,44 @@ export const today = () => new Intl.DateTimeFormat('en-CA',{
 export function monthlyCalendar(root, describe, select) {
   let month = new Date(today().slice(0,7)+'-01T12:00:00Z');
   const label = new Intl.DateTimeFormat('pt-BR',{month:'long',year:'numeric',timeZone:'UTC'});
+  const monthName = new Intl.DateTimeFormat('pt-BR',{month:'long',timeZone:'UTC'});
   const title = document.createElement('h3');
   title.setAttribute('aria-live','polite');
   const heading = document.createElement('div');
   heading.className = 'calendar-heading';
-  function arrow(text, step) {
+  function arrow(step) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'secondary';
-    button.textContent = text;
+    button.className = 'secondary '+(step<0 ? 'calendar-previous' : 'calendar-next');
     button.onclick = () => { month.setUTCMonth(month.getUTCMonth()+step); render(); };
     return button;
   }
-  heading.append(arrow('Anterior',-1),title,arrow('Próximo',1));
+  const previous = arrow(-1), next = arrow(1);
+  heading.append(previous,title,next);
   const grid = document.createElement('div');
   grid.className = 'calendar-grid';
   root.replaceChildren(heading,grid);
   function render() {
     title.textContent = label.format(month);
+    for (const [button,step] of [[previous,-1],[next,1]]) {
+      const target = new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth()+step,1));
+      const name = monthName.format(target);
+      button.textContent = name[0].toLocaleUpperCase('pt-BR')+name.slice(1);
+      button.setAttribute('aria-label',label.format(target));
+    }
     grid.replaceChildren();
-    for (const weekday of ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']) {
+    for (const weekday of ['Sexta','Sábado','Domingo']) {
       const cell = document.createElement('strong');
       cell.textContent = weekday;
       grid.append(cell);
     }
-    for (let i=0;i<month.getUTCDay();i++) grid.append(document.createElement('span'));
+    const first = month.getUTCDay();
+    const padding = first===0 ? 2 : first===6 ? 1 : 0;
+    for (let i=0;i<padding;i++) grid.append(document.createElement('span'));
     const days = new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth()+1,0)).getUTCDate();
     for (let i=1;i<=days;i++) {
+      const weekday = (first+i-1)%7;
+      if (weekday>=1 && weekday<=4) continue;
       const date = month.toISOString().slice(0,8)+String(i).padStart(2,'0');
       const info = describe(date);
       const button = document.createElement('button');

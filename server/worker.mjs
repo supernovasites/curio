@@ -84,9 +84,12 @@ async function createCustomer(db, input, publicRegistration = false) {
   return id;
 }
 
-const availableDates = "SELECT d.day FROM reservation_dates d WHERE d.open=1 AND d.day>=? AND NOT EXISTS (SELECT 1 FROM reservations r WHERE r.day=d.day AND r.status IN ('approved','confirmed'))";
+const hotelDay = day => typeof day==='string' && day===dateOnly(day) &&
+  [0,5,6].includes(new Date(day+'T12:00:00Z').getUTCDay());
+const hotelDaysSql = "strftime('%w',d.day) IN ('5','6','0')";
+const availableDates = "SELECT d.day FROM reservation_dates d WHERE d.open=1 AND d.day>=? AND "+hotelDaysSql+" AND NOT EXISTS (SELECT 1 FROM reservations r WHERE r.day=d.day AND r.status IN ('approved','confirmed'))";
 async function createReservation(db, contactId, day, userId = null) {
-  if (!dateOnly(day) || day.length !== 10 || day < localDay()) fail(400,'Selecione uma data válida.');
+  if (!hotelDay(day) || day < localDay()) fail(400,'Selecione uma sexta, sábado ou domingo a partir de hoje.');
   const id = crypto.randomUUID();
   const result = await db.prepare("INSERT INTO reservations(id,day,contact_id,status,updated_by) SELECT ?,d.day,c.id,'pending',? FROM ("+availableDates+") d CROSS JOIN contacts c WHERE d.day=? AND c.id=? AND c.active=1 ON CONFLICT DO NOTHING")
     .bind(id,userId,localDay(),day,contactId).run();
@@ -209,7 +212,7 @@ async function manageReservations(req, db, path, user, audit) {
   if (path === '/reservations/dates' && method === 'POST') {
     if (user.role !== 'admin') fail(403,'Somente administradores podem alterar a disponibilidade.');
     const {day,open} = await body(req);
-    if (!dateOnly(day) || day.length !== 10 || day < localDay() || typeof open !== 'boolean') fail(400,'Informe uma data a partir de hoje.');
+    if (!hotelDay(day) || day < localDay() || typeof open !== 'boolean') fail(400,'Selecione uma sexta, sábado ou domingo a partir de hoje.');
     await db.prepare('INSERT INTO reservation_dates(day,open) VALUES(?,?) ON CONFLICT(day) DO UPDATE SET open=excluded.open').bind(day,Number(open)).run();
     await audit(user.id,open?'abriu_data':'fechou_data',day);
     return json({ok:true});
@@ -241,7 +244,7 @@ async function manageReservations(req, db, path, user, audit) {
     if (!expected) fail(400,'Selecione uma ação válida.');
     const approving = input.status === 'approved', payment = clean(input.payment,2000);
     if (approving && !payment) fail(400,'Informe os dados de pagamento para o WhatsApp.');
-    const condition = approving ? " AND day>=? AND EXISTS (SELECT 1 FROM reservation_dates d WHERE d.day=reservations.day AND d.open=1) AND NOT EXISTS (SELECT 1 FROM reservations r WHERE r.day=reservations.day AND r.status IN ('approved','confirmed'))" : '';
+    const condition = approving ? " AND day>=? AND EXISTS (SELECT 1 FROM reservation_dates d WHERE d.day=reservations.day AND d.open=1 AND "+hotelDaysSql+") AND NOT EXISTS (SELECT 1 FROM reservations r WHERE r.day=reservations.day AND r.status IN ('approved','confirmed'))" : '';
     const args = [input.status,Number(approving),payment,user.id,id,expected,input.status === 'cancelled' ? 'confirmed' : expected];
     if (approving) args.push(localDay());
     const statement = db.prepare("UPDATE reservations SET status=?,payment=CASE WHEN ? THEN ? ELSE payment END,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND status IN (?,?)"+condition).bind(...args);
