@@ -388,16 +388,20 @@ async function manageReservations(req, db, path, user, audit) {
   const match = path.match(/^\/reservations\/([\w-]+)$/);
   if (match && method === 'PATCH') {
     const input = await body(req), id = match[1];
-    const transitions = new Map([['approved','pending'],['confirmed','approved'],['rejected','pending'],['cancelled','approved']]);
+    const transitions = new Map([
+      ['approved',['pending']],['confirmed',['approved']],['rejected',['pending']],
+      ['cancelled',['pending','approved','confirmed']]
+    ]);
     const expected = transitions.get(input.status);
     if (!expected) fail(400,'Selecione uma ação válida.');
     const approving = input.status === 'approved', payment = clean(input.payment,2000);
     if (approving && !payment) fail(400,'Informe os dados de pagamento para o WhatsApp.');
     const condition = approving ? " AND day>=? AND EXISTS (SELECT 1 FROM reservation_dates d WHERE d.day=reservations.day AND d.open=1 AND "+fridaySql+
       " AND NOT EXISTS (SELECT 1 "+weekendReservations+" AND r.status IN ('approved','confirmed') AND (reservations.room_id IS NULL OR r.room_id IS NULL)))" : '';
-    const args = [input.status,Number(approving),payment,user.id,id,expected,input.status === 'cancelled' ? 'confirmed' : expected];
+    const args = [input.status,Number(approving),payment,user.id,id,...expected];
     if (approving) args.push(localDay());
-    const statement = db.prepare("UPDATE reservations SET status=?,payment=CASE WHEN ? THEN ? ELSE payment END,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND status IN (?,?)"+condition).bind(...args);
+    const placeholders = expected.map(()=>'?').join(',');
+    const statement = db.prepare("UPDATE reservations SET status=?,payment=CASE WHEN ? THEN ? ELSE payment END,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND status IN ("+placeholders+")"+condition).bind(...args);
     const result = await statement.run();
     if (!result.meta.changes) fail(409,'Esta solicitação mudou ou a data já está indisponível. Atualize a lista.');
     await audit(user.id,'reserva_'+input.status,id);

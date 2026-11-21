@@ -287,6 +287,7 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal((await call('/campanhas/reservations/'+id,'PATCH',{status:'confirmed'},staff)).status,200);
   const confirmed = await (await call('/reserva/me','GET',null,customer)).json();
   assert.deepEqual(confirmed.reservations,[{id,day,status:'confirmed',quote}]);
+  assert.deepEqual(await (await call('/reserva/rooms?day='+day)).json(),[]);
   assert.equal((await call('/campanhas/reservations/'+id,'PATCH',{status:'cancelled'},staff)).status,200);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[day]);
   const linked = await call('/campanhas/reservations','POST',{day,...room,customerId},staff);
@@ -299,7 +300,7 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal((await changed.json()).quote.totalCents,250000);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[]);
   assert.equal((await call('/reserva/requests','POST',{day,...room},customer)).status,409);
-  assert.equal((await call('/campanhas/reservations/'+otherId,'PATCH',{status:'rejected'},staff)).status,200);
+  assert.equal((await call('/campanhas/reservations/'+otherId,'PATCH',{status:'cancelled'},staff)).status,200);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[day]);
   const legacyPending = await call('/campanhas/reservations','POST',{day,...room,customerId},staff);
   const {id:legacyConflict} = await legacyPending.json();

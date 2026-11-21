@@ -196,6 +196,7 @@ function renderReservation(item,row) {
     onSubmit(form,({payment}) => changeReservation(row,'approved',payment));
     item.append(form);
     addAction(actions,row,'Recusar','rejected');
+    addAction(actions,row,'Cancelar intenção','cancelled');
   }
   if (row.status === 'approved') {
     if (row.has_phone) actions.append(whatsapp(row));
