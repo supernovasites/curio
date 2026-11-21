@@ -46,15 +46,16 @@ function renderSelected() {
 }
 
 const stages = [
-  ['all','Total de reservas'],['pending','Aguardando aprovação'],['approved','Aprovadas'],
-  ['confirmed','Confirmadas'],['closed','Recusadas ou canceladas']
+  ['all','Total de reservas','Total'],['pending','Aguardando aprovação','Pendentes'],
+  ['approved','Aprovadas','Aprovadas'],['confirmed','Confirmadas','Confirmadas'],
+  ['closed','Recusadas ou canceladas','Encerradas']
 ];
 const inStage = (row,key) => key==='all' || (key==='closed' ? ['rejected','cancelled'].includes(row.status) : row.status===key);
 
 function renderBookings() {
   if (reservedPage) {
     const metrics = $('#booking-stages');
-    metrics.replaceChildren(...stages.map(([key,text]) => {
+    metrics.replaceChildren(...stages.map(([key,text,shortText]) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'metric';
@@ -62,7 +63,14 @@ function renderBookings() {
       button.setAttribute('aria-pressed',String(stage===key));
       const count = document.createElement('strong');
       count.textContent = reservations.filter(row=>inStage(row,key)).length.toLocaleString('pt-BR');
-      button.append(text,count);
+      button.setAttribute('aria-label',text+' '+count.textContent);
+      const fullLabel = document.createElement('span');
+      fullLabel.className = 'stage-label-full';
+      fullLabel.textContent = text;
+      const shortLabel = document.createElement('span');
+      shortLabel.className = 'stage-label-short';
+      shortLabel.textContent = shortText;
+      button.append(fullLabel,shortLabel,count);
       button.onclick = ()=>{stage=key;renderBookings();metrics.children[stages.findIndex(([id])=>id===key)].focus();};
       return button;
     }));

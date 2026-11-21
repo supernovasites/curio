@@ -35,6 +35,7 @@
 .calendar-navigation { margin-bottom: .5rem; }
 .calendar-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%, 13rem),1fr)); gap: .5rem; text-align: center; }
 .calendar-empty { grid-column: 1 / -1; margin-block: .75rem; }
+#booking-stages .stage-label-short { display: none; }
 .calendar-grid .calendar-day { min-height: 5.25rem; padding: .65rem; color: #23362a; background: #e9e6df; overflow-wrap: anywhere; line-height: 1.25; }
 .calendar-grid small { display: block; font-size: .78rem; margin-top: .25rem; }
 .calendar-grid .available { background: #d9ead1; }
@@ -71,6 +72,11 @@
 }
 #registration-fields { min-width: 0; margin: 0 0 .75rem; }
 @media (max-width: 520px) {
+  #booking-stages { grid-template-columns: repeat(3,minmax(0,1fr)); gap: .35rem; }
+  #booking-stages .metric { min-height: 56px; padding: .4rem .2rem; }
+  #booking-stages .stage-label-full { display: none; }
+  #booking-stages .stage-label-short { display: block; min-height: 0; font-size: .7rem; line-height: 1.15; }
+  #booking-stages .metric strong { margin-top: .18rem; font-size: 1.3rem; }
   .calendar-heading { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
   .calendar-heading h3 { grid-column: 1 / -1; grid-row: 1; }
   .calendar-heading button, .reservation-form button, #request-button { min-height: 44px; }
