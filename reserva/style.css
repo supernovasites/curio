@@ -22,6 +22,12 @@
 .customer-editor summary { cursor: pointer; }
 #profile-details summary { padding-block: .5rem; font-weight: 700; }
 #profile-details { margin-block-end: .75rem; }
+.room-list { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,12rem),1fr)); gap: .75rem; }
+.room-card { border: 1px solid #d9ded5; border-radius: .4rem; overflow: hidden; }
+.room-card summary { cursor: pointer; padding: .65rem; }
+.room-card summary img { display: block; width: 100%; height: 8rem; object-fit: cover; border-radius: .25rem; margin-bottom: .5rem; }
+.room-card > div { padding: 0 .65rem .65rem; }
+.room-editor-photo { width: min(100%,18rem); max-height: 12rem; object-fit: cover; margin-block: .5rem; }
 #registration-fields { min-width: 0; margin: 0 0 .75rem; }
 @media (max-width: 520px) {
   .reservation-header { padding: .75rem 1rem; }

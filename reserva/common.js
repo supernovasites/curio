@@ -129,3 +129,97 @@ export function monthlyCalendar(root, describe, select) {
   render();
   return render;
 }
+
+export const money = cents => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(cents/100);
+
+export function quoteLine(quote) {
+  const guests = quote.adults+' adulto(s) a '+money(quote.adultCents) +
+    (quote.children ? ' e '+quote.children+' criança(s) a '+money(quote.childCents) : '');
+  return quote.room+' · '+quote.nights+' diárias · '+guests+' por diária · Total '+money(quote.totalCents);
+}
+
+export function roomPicker(root, changed) {
+  let selected = null, adults, children;
+  const totals = document.createElement('p');
+  totals.setAttribute('role','status');
+  function selection() {
+    if (!selected) return null;
+    const a = Number(adults.value), c = Number(children.value);
+    if (!adults.validity.valid || !children.validity.valid || a+c>selected.capacity || (c && selected.child_cents===null)) return null;
+    return {roomId:selected.id,adults:a,children:c};
+  }
+  function update() {
+    const input = selection();
+    totals.textContent = !selected ? '' : input
+      ? selected.name+' · Estimativa para duas diárias: '+money(2*(input.adults*selected.adult_cents+input.children*(selected.child_cents??0)))
+      : 'Confira a capacidade e a tarifa infantil.';
+    changed();
+  }
+  function render(rooms) {
+    selected = null;
+    const cards = document.createElement('div');
+    cards.className = 'room-list';
+    const guestFields = document.createElement('div');
+    guestFields.className = 'reservation-form';
+    guestFields.hidden = true;
+    const numeric = (text,min) => {
+      const label = document.createElement('label');
+      label.textContent = text;
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.min = String(min);
+      input.value = String(min);
+      input.required = true;
+      input.oninput = update;
+      label.append(input);
+      guestFields.append(label);
+      return input;
+    };
+    adults = numeric('Adultos (12 anos ou mais)',1);
+    children = numeric('Crianças (até 11 anos)',0);
+    for (const room of rooms) {
+      const card = document.createElement('details');
+      card.className = 'room-card';
+      const summary = document.createElement('summary');
+      if (room.photo) {
+        const photo = document.createElement('img');
+        photo.src = room.photo;
+        photo.alt = '';
+        photo.loading = 'lazy';
+        summary.append(photo);
+      }
+      const name = document.createElement('strong');
+      name.textContent = room.name;
+      summary.append(name);
+      const details = document.createElement('div');
+      const description = document.createElement('p');
+      description.textContent = room.description;
+      const rates = document.createElement('p');
+      rates.textContent = 'Até '+room.capacity+' hóspedes · Adulto: '+money(room.adult_cents)+' por diária · Criança: '+
+        (room.child_cents===null ? 'tarifa a consultar' : money(room.child_cents)+' por diária');
+      const pick = document.createElement('button');
+      pick.type = 'button';
+      pick.className = 'secondary';
+      pick.textContent = 'Selecionar '+room.name;
+      pick.onclick = () => {
+        selected = room;
+        adults.max = String(room.capacity);
+        children.max = String(room.capacity-1);
+        children.disabled = room.child_cents===null;
+        adults.value = '1';
+        children.value = '0';
+        guestFields.hidden = false;
+        update();
+        adults.focus();
+      };
+      details.append(description,rates,pick);
+      card.append(summary,details);
+      cards.append(card);
+    }
+    const legend = document.createElement('h3');
+    legend.textContent = rooms.length ? 'Quartos disponíveis' : 'Nenhum quarto disponível';
+    root.replaceChildren(legend,cards,guestFields,totals);
+    update();
+  }
+  return {render,selection,reset(){ selected = null; changed(); }};
+}

@@ -11,6 +11,7 @@ sqlite.exec(await readFile('migrations/0004_reserva_realizada.sql','utf8'));
 sqlite.exec(await readFile('migrations/0005_unique_homepage_visits.sql','utf8'));
 sqlite.exec(await readFile('migrations/0006_reservations.sql','utf8'));
 sqlite.exec(await readFile('migrations/0007_customer_directory.sql','utf8'));
+sqlite.exec(await readFile('migrations/0008_rooms.sql','utf8'));
 const DB={prepare(sql){const stmt=sqlite.prepare(sql);let args=[];const api={
   bind(...v){args=v;return api;},
   async first(){return stmt.get(...args)||null;},

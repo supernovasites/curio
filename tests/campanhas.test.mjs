@@ -135,7 +135,7 @@ test('public and staff reservations share dates, accounts and approval state',as
   t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,10,21,15)});
   const sqlite = new DatabaseSync(':memory:');
   t.after(()=>sqlite.close());
-  for (const file of ['0001_campanhas','0003_contact_details','0004_reserva_realizada','0006_reservations','0007_customer_directory'])
+  for (const file of ['0001_campanhas','0003_contact_details','0004_reserva_realizada','0006_reservations','0007_customer_directory','0008_rooms'])
     sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
   sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)')
     .run('staff','staff','Equipe',await hashPassword('password-test'),'admin');
@@ -147,6 +147,11 @@ test('public and staff reservations share dates, accounts and approval state',as
   const call = (path,...args) => request('/api'+path,...args);
   const session = response => response.headers.get('Set-Cookie').split(';')[0];
   const staff = session(await call('/campanhas/login','POST',{username:'staff',password:'password-test'}));
+  const catalog = await (await call('/campanhas/rooms','GET',null,staff)).json();
+  assert.equal(catalog.length,7);
+  sqlite.exec("UPDATE rooms SET stock=0 WHERE id NOT IN ('sede-3','arvore')");
+  const sede = catalog.find(room=>room.id==='sede-3');
+  const room = {roomId:'sede-3',adults:2,children:1};
   const day = '2026-11-27';
   const oldSaturday = '2026-11-28';
   const weekday = '2026-11-23';
@@ -179,10 +184,17 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal(profile.customer.name,input.name);
   assert.equal(profile.customer.cpf,undefined);
   assert.equal((await call('/campanhas/reservations','GET',null,customer)).status,401);
-  const submitted = await call('/reserva/requests','POST',{day,customerId:'ignored'},customer);
+  assert.equal((await call('/reserva/requests','POST',{day,...room},customer)).status,409);
+  assert.equal((await call('/campanhas/rooms/sede-3','PATCH',{...sede,child_cents:30000},staff)).status,200);
+  assert.equal((await call('/reserva/requests','POST',{day,...room,children:2},customer)).status,409);
+  const submitted = await call('/reserva/requests','POST',{day,...room,customerId:'ignored'},customer);
   assert.equal(submitted.status,201);
-  const {id} = await submitted.json();
-  assert.equal((await call('/reserva/requests','POST',{day},customer)).status,409);
+  const {id,quote} = await submitted.json();
+  assert.equal(quote.totalCents,420000);
+  assert.equal(quote.nights,2);
+  assert.equal((await call('/campanhas/rooms/sede-3','PATCH',{...sede,adult_cents:95000,child_cents:30000},staff)).status,200);
+  assert.equal((await call('/reserva/requests','POST',{day,...room},customer)).status,409);
+  assert.deepEqual((await (await call('/reserva/rooms?day='+day)).json()).map(entry=>entry.id),['arvore']);
   const other = {name:'Ágata Importada',phone:input.phone,birth_date:'1990-04-11',registered_at:'2023-11-10'};
   const created = await call('/campanhas/customers','POST',other,staff);
   assert.equal(created.status,201);
@@ -202,7 +214,11 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal((await call('/campanhas/customers/'+customerId,'PATCH',other,operator)).status,403);
   assert.equal((await call('/campanhas/reservations/customers','POST',{q:'agata'},operator)).status,403);
   assert.equal((await call('/campanhas/reservations/dates','GET',null,operator)).status,403);
-  assert.equal((await call('/campanhas/reservations','POST',{day,customerId},operator)).status,403);
+  assert.equal((await call('/campanhas/reservations','POST',{day,...room,customerId},operator)).status,403);
+  assert.equal((await call('/campanhas/rooms','GET',null,operator)).status,403);
+  const treeRequest = await call('/campanhas/reservations','POST',{day,roomId:'arvore',adults:1,children:0,customerId},staff);
+  assert.equal(treeRequest.status,201);
+  const {id:treeId} = await treeRequest.json();
   for (const path of ['/reservas','/reservas/']) {
     const publicPage = await request(path);
     assert.equal(publicPage.status,200);
@@ -228,7 +244,7 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal(filtered.total,1);
   assert.equal(filtered.rows[0].has_account,0);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[]);
-  assert.equal((await call('/campanhas/reservations','POST',{day,customerId},staff)).status,409);
+  assert.equal((await call('/campanhas/reservations','POST',{day,...room,customerId},staff)).status,409);
   assert.equal((await call('/campanhas/reservations/'+id,'PATCH',{status:'approved'},staff)).status,400);
   assert.equal((await call('/campanhas/reservations/'+id,'PATCH',{status:'approved',payment:'Pagamento de teste'},staff)).status,200);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[]);
@@ -241,17 +257,17 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.ok(new URL(whatsapp.headers.get('Location')).searchParams.get('text').includes('Entrada: 27/11/2026 às 15h. Saída: 29/11/2026 às 15h.'));
   assert.equal((await call('/campanhas/reservations/'+id,'PATCH',{status:'confirmed'},staff)).status,200);
   const confirmed = await (await call('/reserva/me','GET',null,customer)).json();
-  assert.deepEqual(confirmed.reservations,[{id,day,status:'confirmed'}]);
+  assert.deepEqual(confirmed.reservations,[{id,day,status:'confirmed',quote}]);
   assert.equal((await call('/campanhas/reservations/'+id,'PATCH',{status:'cancelled'},staff)).status,200);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[day]);
-  const linked = await call('/campanhas/reservations','POST',{day,customerId},staff);
+  const linked = await call('/campanhas/reservations','POST',{day,...room,customerId},staff);
   assert.equal(linked.status,201);
   const {id:otherId} = await linked.json();
   assert.deepEqual(await (await call('/reserva/dates')).json(),[]);
-  assert.equal((await call('/reserva/requests','POST',{day},customer)).status,409);
+  assert.equal((await call('/reserva/requests','POST',{day,...room},customer)).status,409);
   assert.equal((await call('/campanhas/reservations/'+otherId,'PATCH',{status:'rejected'},staff)).status,200);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[day]);
-  const legacyPending = await call('/campanhas/reservations','POST',{day,customerId},staff);
+  const legacyPending = await call('/campanhas/reservations','POST',{day,...room,customerId},staff);
   const {id:legacyConflict} = await legacyPending.json();
   sqlite.prepare("INSERT INTO reservations(id,day,contact_id,status) VALUES('legacy-saturday',?,?,'confirmed')").run(oldSaturday,customerId);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[]);
@@ -262,7 +278,7 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal(newSession.status,200);
   const otherProfile = await (await call('/reserva/me','GET',null,session(newSession))).json();
   assert.equal(otherProfile.customer.name,'Ágata Editada');
-  assert.deepEqual(new Set(otherProfile.reservations.map(row=>row.id)),new Set(['legacy-saturday',otherId,legacyConflict]));
+  assert.deepEqual(new Set(otherProfile.reservations.map(row=>row.id)),new Set(['legacy-saturday',treeId,otherId,legacyConflict]));
   for (let attempt=0;attempt<5;attempt++) {
     assert.equal((await call('/reserva/login','POST',{cpf:'11144477735',birth_date:'1990-04-12'})).status,401);
   }

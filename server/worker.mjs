@@ -87,17 +87,32 @@ async function createCustomer(db, input, publicRegistration = false) {
 const hotelDay = day => typeof day==='string' && day===dateOnly(day) &&
   new Date(day+'T12:00:00Z').getUTCDay()===5;
 const fridaySql = "strftime('%w',d.day)='5'";
-const weekendReservations = "SELECT 1 FROM reservations r WHERE r.day BETWEEN d.day AND date(d.day,'+2 days')";
-const weekendOccupancy = weekendReservations+" AND r.status IN ('approved','confirmed')";
-const weekendHold = weekendReservations+" AND r.status IN ('pending','approved','confirmed')";
-const availableDates = "SELECT d.day FROM reservation_dates d WHERE d.open=1 AND d.day>=? AND "+fridaySql+" AND NOT EXISTS ("+weekendHold+")";
-async function createReservation(db, contactId, day, userId = null) {
+const weekendReservations = "FROM reservations r WHERE r.day BETWEEN d.day AND date(d.day,'+2 days')";
+const holdingStatus = " AND r.status IN ('pending','approved','confirmed')";
+const legacyHold = 'EXISTS (SELECT 1 '+weekendReservations+' AND r.room_id IS NULL'+holdingStatus+')';
+const remainingRooms = '(room.stock-(SELECT COUNT(*) '+weekendReservations+' AND r.room_id=room.id'+holdingStatus+'))';
+const availableDates = "SELECT d.day FROM reservation_dates d WHERE d.open=1 AND d.day>=? AND "+fridaySql+
+  " AND NOT "+legacyHold+" AND EXISTS(SELECT 1 FROM rooms room WHERE "+remainingRooms+">0)";
+
+async function roomsForDate(db, day) {
+  if (!hotelDay(day) || day<localDay()) fail(400,'Selecione uma sexta-feira disponível.');
+  const {results} = await db.prepare('SELECT room.*, '+remainingRooms+' remaining FROM reservation_dates d CROSS JOIN rooms room WHERE d.day=? AND d.open=1 AND NOT '+legacyHold+' AND '+remainingRooms+'>0 ORDER BY room.name').bind(day).all();
+  return json(results.map(({stock,...room})=>room));
+}
+
+async function createReservation(db, contactId, input, userId = null) {
+  const {day,adults,children} = input, roomId = clean(input.roomId,80);
   if (!hotelDay(day) || day < localDay()) fail(400,'Selecione a sexta-feira de entrada do fim de semana, a partir de hoje.');
+  if (!roomId || !Number.isInteger(adults) || !Number.isInteger(children) || adults<1 || adults>30 || children<0 || children>30)
+    fail(400,'Selecione um quarto e informe a quantidade de adultos e crianças.');
   const id = crypto.randomUUID();
-  const result = await db.prepare("INSERT INTO reservations(id,day,contact_id,status,updated_by) SELECT ?,d.day,c.id,'pending',? FROM ("+availableDates+") d CROSS JOIN contacts c WHERE d.day=? AND c.id=? AND c.active=1 ON CONFLICT DO NOTHING")
-    .bind(id,userId,localDay(),day,contactId).run();
-  if (!result.meta.changes) fail(409,'Data indisponível, cliente inativo ou já existe um pedido para esta data.');
-  return json({id},201);
+  const sql = "INSERT INTO reservations(id,day,contact_id,status,updated_by,room_id,quote) "+
+    "SELECT ?,d.day,c.id,'pending',?,room.id,json_object('room',room.name,'adults',?,'children',?,'adultCents',room.adult_cents,'childCents',room.child_cents,'nights',2,'totalCents',2*(room.adult_cents*?+COALESCE(room.child_cents,0)*?)) "+
+    "FROM reservation_dates d CROSS JOIN rooms room CROSS JOIN contacts c WHERE d.day=? AND d.open=1 AND room.id=? AND c.id=? AND c.active=1 "+
+    "AND room.capacity>=? AND (?=0 OR room.child_cents IS NOT NULL) AND NOT "+legacyHold+" AND "+remainingRooms+">0 RETURNING id,day,quote";
+  const result = await db.prepare(sql).bind(id,userId,adults,children,adults,children,day,roomId,contactId,adults+children,children).first();
+  if (!result) fail(409,'Quarto indisponível para esse fim de semana ou quantidade de hóspedes, ou tarifa infantil ainda não definida.');
+  return json({...result,quote:JSON.parse(result.quote)},201);
 }
 
 const customerCookie = (token, seconds) =>
@@ -108,6 +123,7 @@ async function publicReservations(req, env, path) {
   const db = env.DB, method = req.method, now = Date.now();
   if (!db) fail(503,'Reservas indisponíveis.');
   if (method !== 'GET' && req.headers.get('Origin') !== new URL(req.url).origin) fail(403,'Origem inválida.');
+  if (path === '/rooms' && method === 'GET') return roomsForDate(db,new URL(req.url).searchParams.get('day'));
   if (path === '/dates' && method === 'GET') {
     const {results} = await db.prepare(availableDates+' ORDER BY d.day').bind(localDay()).all();
     return json(results.map(row => row.day));
@@ -142,9 +158,9 @@ async function publicReservations(req, env, path) {
   const customer = await db.prepare('SELECT c.id,c.name,c.phone,c.city,c.state FROM customer_sessions s JOIN contacts c ON c.id=s.contact_id WHERE s.token_hash=? AND s.expires_at>? AND c.active=1').bind(tokenHash,now).first();
   if (!customer) fail(401,'Informe CPF e data de nascimento para acessar seu cadastro.');
   if (path === '/me' && method === 'GET') {
-    const {results} = await db.prepare('SELECT id,day,status FROM reservations WHERE contact_id=? ORDER BY day DESC,created_at DESC').bind(customer.id).all();
+    const {results} = await db.prepare('SELECT id,day,status,quote FROM reservations WHERE contact_id=? ORDER BY day DESC,created_at DESC').bind(customer.id).all();
     const deletion = await db.prepare('SELECT created_at FROM audit WHERE action=? AND entity_id=? LIMIT 1').bind(deletionRequestAction,customer.id).first();
-    return json({customer,reservations:results,deletionRequestedAt:deletion?.created_at || null});
+    return json({customer,reservations:results.map(readQuote),deletionRequestedAt:deletion?.created_at || null});
   }
   if (path === '/me/deletion-request' && method === 'POST') {
     await db.prepare('INSERT INTO audit(action,entity_id) SELECT ?,? WHERE NOT EXISTS (SELECT 1 FROM audit WHERE action=? AND entity_id=?)')
@@ -156,7 +172,7 @@ async function publicReservations(req, env, path) {
     await db.prepare('UPDATE contacts SET name=?,phone=?,city=?,state=? WHERE id=? AND active=1').bind(name,phone,city,state,customer.id).run();
     return json({ok:true});
   }
-  if (path === '/requests' && method === 'POST') return createReservation(db,customer.id,(await body(req)).day);
+  if (path === '/requests' && method === 'POST') return createReservation(db,customer.id,await body(req));
   if (path === '/logout' && method === 'POST') {
     await db.prepare('DELETE FROM customer_sessions WHERE token_hash=?').bind(tokenHash).run();
     return json({ok:true},200,{'Set-Cookie':customerCookie('',0)});
@@ -164,9 +180,35 @@ async function publicReservations(req, env, path) {
   fail(404,'Recurso não encontrado.');
 }
 
+function readQuote(row) {
+  return {...row,quote:row.quote ? JSON.parse(row.quote) : null};
+}
+
+async function manageRooms(req,db,path,audit,user) {
+  if (path === '/rooms' && req.method === 'GET')
+    return json((await db.prepare('SELECT * FROM rooms ORDER BY name').all()).results);
+  const match = path.match(/^\/rooms\/([\w-]+)$/);
+  if (!match || req.method !== 'PATCH') fail(404,'Quarto não encontrado.');
+  const input = await body(req);
+  const {capacity,stock,adult_cents,child_cents} = input;
+  const name = clean(input.name,100), description = clean(input.description,2000), photo = clean(input.photo,500);
+  const price = value => Number.isInteger(value) && value>=0 && value<=10000000;
+  if (!name || !Number.isInteger(capacity) || capacity<1 || capacity>30 || !Number.isInteger(stock) || stock<0 || stock>100 ||
+      !price(adult_cents) || (child_cents!==null && !price(child_cents)) ||
+      (photo && !/^https:\/\/s3-cdn\.hotellinksolutions\.com\/hbe\/data\/a0966616-995f-1748368822-4cab-adc8-88e27afe5e1a\/gallery\/room\/[\w./%-]+$/.test(photo)))
+    fail(400,'Confira nome, capacidade, estoque, tarifas e o link da foto do Hospedin.');
+  const result = await db.prepare('UPDATE rooms SET name=?,description=?,photo=?,capacity=?,stock=?,adult_cents=?,child_cents=? WHERE id=?')
+    .bind(name,description,photo,capacity,stock,adult_cents,child_cents,match[1]).run();
+  if (!result.meta.changes) fail(404,'Quarto não encontrado.');
+  await audit(user.id,'alterou_quarto',match[1]);
+  return json({ok:true});
+}
+
 async function manageReservations(req, db, path, user, audit) {
   const method = req.method;
   if (user.role !== 'admin') fail(403,'Somente administradores podem gerenciar clientes e reservas.');
+  if (path === '/rooms' || path.startsWith('/rooms/')) return manageRooms(req,db,path,audit,user);
+  if (path === '/reservations/rooms' && method === 'GET') return roomsForDate(db,new URL(req.url).searchParams.get('day'));
   const reservationSearch = path === '/reservations/customers';
   if ((path === '/customers/search' || reservationSearch) && method === 'POST') {
     const input = await body(req), pageSize = 25;
@@ -217,7 +259,7 @@ async function manageReservations(req, db, path, user, audit) {
     return json({id},201);
   }
   if (path === '/reservations/dates' && method === 'GET') {
-    const {results} = await db.prepare("SELECT d.day,d.open,EXISTS("+weekendHold+") booked FROM reservation_dates d WHERE "+fridaySql+" ORDER BY d.day").all();
+    const {results} = await db.prepare('SELECT d.day,d.open,d.day IN ('+availableDates+') available FROM reservation_dates d WHERE '+fridaySql+' ORDER BY d.day').bind(localDay()).all();
     return json(results);
   }
   if (path === '/reservations/dates' && method === 'POST') {
@@ -228,16 +270,16 @@ async function manageReservations(req, db, path, user, audit) {
     return json({ok:true});
   }
   if (path === '/reservations' && method === 'GET') {
-    const {results} = await db.prepare("SELECT r.id,r.day,r.status,c.name,(c.phone<>'') has_phone FROM reservations r JOIN contacts c ON c.id=r.contact_id ORDER BY (r.status='pending') DESC,r.day DESC,r.created_at DESC").all();
-    return json(results);
+    const {results} = await db.prepare("SELECT r.id,r.day,r.status,r.quote,c.name,(c.phone<>'') has_phone FROM reservations r JOIN contacts c ON c.id=r.contact_id ORDER BY (r.status='pending') DESC,r.day DESC,r.created_at DESC").all();
+    return json(results.map(readQuote));
   }
   if (path === '/reservations' && method === 'POST') {
-    const {day,customerId} = await body(req);
-    return createReservation(db,clean(customerId,80),day,user.id);
+    const input = await body(req);
+    return createReservation(db,clean(input.customerId,80),input,user.id);
   }
   const whatsapp = path.match(/^\/reservations\/([\w-]+)\/whatsapp$/);
   if (whatsapp && method === 'GET') {
-    const row = await db.prepare("SELECT r.day,r.status,r.payment,c.name,c.phone FROM reservations r JOIN contacts c ON c.id=r.contact_id WHERE r.id=? AND r.status IN ('approved','confirmed')").bind(whatsapp[1]).first();
+    const row = await db.prepare("SELECT r.day,r.status,r.payment,r.quote,c.name,c.phone FROM reservations r JOIN contacts c ON c.id=r.contact_id WHERE r.id=? AND r.status IN ('approved','confirmed')").bind(whatsapp[1]).first();
     if (!row || !/^[1-9]\d{7,14}$/.test(row.phone)) fail(404,'WhatsApp da reserva indisponível.');
     const day = row.day.split('-').reverse().join('/');
     const message = row.status === 'confirmed'
@@ -246,7 +288,7 @@ async function manageReservations(req, db, path, user, audit) {
     const end = new Date(Date.parse(row.day+'T12:00:00Z')+2*86400000).toISOString().slice(0,10).split('-').reverse().join('/');
     const schedule = hotelDay(row.day) ? '\n\nEntrada: '+day+' às 15h. Saída: '+end+' às 15h.' : '';
     await audit(user.id,'abriu_whatsapp_reserva',whatsapp[1]);
-    return new Response(null,{status:303,headers:{Location:'https://wa.me/'+row.phone+'?text='+encodeURIComponent(message+schedule)}});
+    return new Response(null,{status:303,headers:{Location:'https://wa.me/'+row.phone+'?text='+encodeURIComponent(message+schedule+(row.quote ? '\\nOrçamento: '+new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(JSON.parse(row.quote).totalCents/100) : ''))}});
   }
   const match = path.match(/^\/reservations\/([\w-]+)$/);
   if (match && method === 'PATCH') {
@@ -256,7 +298,8 @@ async function manageReservations(req, db, path, user, audit) {
     if (!expected) fail(400,'Selecione uma ação válida.');
     const approving = input.status === 'approved', payment = clean(input.payment,2000);
     if (approving && !payment) fail(400,'Informe os dados de pagamento para o WhatsApp.');
-    const condition = approving ? " AND day>=? AND EXISTS (SELECT 1 FROM reservation_dates d WHERE d.day=reservations.day AND d.open=1 AND "+fridaySql+" AND NOT EXISTS ("+weekendOccupancy+"))" : '';
+    const condition = approving ? " AND day>=? AND EXISTS (SELECT 1 FROM reservation_dates d WHERE d.day=reservations.day AND d.open=1 AND "+fridaySql+
+      " AND NOT EXISTS (SELECT 1 "+weekendReservations+" AND r.status IN ('approved','confirmed') AND (reservations.room_id IS NULL OR r.room_id IS NULL)))" : '';
     const args = [input.status,Number(approving),payment,user.id,id,expected,input.status === 'cancelled' ? 'confirmed' : expected];
     if (approving) args.push(localDay());
     const statement = db.prepare("UPDATE reservations SET status=?,payment=CASE WHEN ? THEN ? ELSE payment END,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND status IN (?,?)"+condition).bind(...args);
@@ -315,7 +358,7 @@ async function api(req, env, path) {
     const headers = user.role==='admin' ? {'Set-Cookie':reservationsCookie(token,Math.ceil((expires_at-now)/1000))} : {};
     return json(profile,200,headers);
   }
-  if(path==='/customers' || path.startsWith('/customers/') || path==='/reservations' || path.startsWith('/reservations/'))
+  if(path==='/rooms' || path.startsWith('/rooms/') || path==='/customers' || path.startsWith('/customers/') || path==='/reservations' || path.startsWith('/reservations/'))
     return manageReservations(req,db,path,user,audit);
   if(path==='/base-cities' && method==='GET'){
     if(user.role!=='admin')fail(403,'Somente administradores podem acessar os dados da base.');
@@ -528,7 +571,7 @@ export default {
       headers.set('Cache-Control','no-store');
       headers.set('Referrer-Policy','no-referrer');
       headers.set('X-Robots-Tag','noindex');
-      headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://wa.me https://*.whatsapp.com");
+      headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://s3-cdn.hotellinksolutions.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://wa.me https://*.whatsapp.com");
     }
     return new Response(response.body,{status:response.status,headers});
   }

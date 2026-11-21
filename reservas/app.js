@@ -1,5 +1,5 @@
 import {renderHeader} from '/campanhas/nav.js';
-import {$, api, weekendEnd, weekendLabel, reservationLabel, statuses, message, onSubmit, customerFields, options, list, monthlyCalendar, today} from '/reservar/common.js';
+import {$, api, weekendEnd, weekendLabel, reservationLabel, statuses, message, onSubmit, customerFields, options, list, monthlyCalendar, today, roomPicker, quoteLine} from '/reservar/common.js';
 
 const staff = (path,method,data) => api('/api/campanhas',path,method,data);
 const page = location.pathname.startsWith('/clientes') ? 'clientes' : 'reservas';
@@ -10,26 +10,36 @@ let selected = '', calendarDates = new Map(), reservations = [], canManage = fal
 let filters = {}, customerPageNumber = 1, searchVersion = 0;
 const dateForm = $('#date-form');
 const registerIntent = $('#register-intent');
-const holdsWeekend = row => ['pending','approved','confirmed'].includes(row.status);
+let roomVersion = 0;
+const picker = roomPicker($('#room-picker'),updateRegisterButton);
 const onWeekend = (row,friday) => row.day>=friday && row.day<=weekendEnd(friday);
 const renderCalendar = monthlyCalendar($('#calendar'),day => {
-  const calendarDate = calendarDates.get(day);
-  const booking = reservations.find(row=>onWeekend(row,day) && ['approved','confirmed'].includes(row.status));
-  const requests = reservations.filter(row=>onWeekend(row,day) && row.status==='pending').length;
-  const open = calendarDate?.open && day>=today();
-  const label = booking ? 'Ocupada · '+booking.name : requests ? 'Bloqueada · intenção pendente' : open ? 'Disponível' : 'Bloqueada';
-  return {state:booking ? 'booked' : open && !requests ? 'available' : 'blocked',
-    label, selected:day===selected};
-},day=>{ selected = day; renderSelected(); });
+  const date = calendarDates.get(day);
+  const label = date?.available ? 'Quartos disponíveis' : date?.open && day>=today() ? 'Sem quartos livres' : 'Bloqueado';
+  return {state:date?.available ? 'available' : 'blocked',label,selected:day===selected};
+},day=>{ selected = day; renderSelected(); loadRooms().catch(error=>message(error.message,true)); });
+
+function updateRegisterButton() {
+  registerIntent.disabled = !calendarDates.get(selected)?.available ||
+    !newReservation.elements.customerId.value || !picker.selection();
+}
+
+async function loadRooms() {
+  const version = ++roomVersion, day = selected;
+  $('#room-picker').replaceChildren();
+  picker.reset();
+  if (!day || !calendarDates.get(day)?.available) return;
+  const rooms = await staff('/reservations/rooms?day='+encodeURIComponent(day));
+  if (version===roomVersion) picker.render(rooms);
+}
 
 function renderSelected() {
-  const available = selected && calendarDates.get(selected)?.open && !calendarDates.get(selected)?.booked && !reservations.some(row=>onWeekend(row,selected) && holdsWeekend(row)) && selected>=today();
   $('#selected-date').textContent = selected ? 'Fim de semana selecionado: '+weekendLabel(selected) : 'Selecione um fim de semana no calendário.';
   dateForm.elements.day.value = selected;
   dateForm.hidden = !canManage;
   for (const button of dateForm.querySelectorAll('button')) button.disabled = !selected || selected<today();
   newReservation.elements.day.value = selected;
-  registerIntent.disabled = !available || !newReservation.elements.customerId.value;
+  updateRegisterButton();
   list($('#reservation-list'),selected ? reservations.filter(row=>onWeekend(row,selected)) : reservations,renderReservation,'Nenhuma solicitação registrada.');
 }
 
@@ -84,6 +94,7 @@ async function loadDates() {
   calendarDates = new Map(rows.map(row=>[row.day,row]));
   renderCalendar();
   renderSelected();
+  await loadRooms();
 }
 
 function whatsapp(row) {
@@ -113,6 +124,11 @@ function renderReservation(item,row) {
   const label = document.createElement('strong');
   label.textContent = reservationLabel(row.day)+' · '+row.name+' · '+statuses[row.status];
   item.append(label);
+  if (row.quote) {
+    const budget = document.createElement('p');
+    budget.textContent = 'Orçamento: '+quoteLine(row.quote);
+    item.append(budget);
+  }
   const actions = document.createElement('div');
   actions.className = 'reservation-actions';
   item.append(actions);
@@ -187,8 +203,10 @@ onSubmit($('#date-form'),async ({day},button) => {
 newReservation.elements.customerId.onchange = renderSelected;
 onSubmit(newReservation,async data => {
   try {
-    await staff('/reservations','POST',data);
-    message('Intenção registrada. O fim de semana está bloqueado para novos pedidos.');
+    const room = picker.selection();
+    if (!room) return;
+    const result = await staff('/reservations','POST',{...data,...room});
+    message('Intenção registrada. Orçamento: '+quoteLine(result.quote));
   } finally {
     await Promise.all([loadDates(),loadReservations()]);
   }

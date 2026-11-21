@@ -11,6 +11,9 @@ for(const f of ['index.html','app.js','style.css','csv.js','nav.js','password.js
 for(const f of ['index.html','app.js'])await copyFile(`painel/${f}`,`dist/painel/${f}`);
 for(const f of ['index.html','app.js','common.js','style.css']) await copyFile('reserva/'+f,'dist/reservar/'+f);
 for(const f of ['index.html','app.js']) await copyFile('reservas/'+f,'dist/reservarquarto/'+f);
+await mkdir('dist/reservarquarto/quartos',{recursive:true});
+await copyFile('reservas/quartos.html','dist/reservarquarto/quartos/index.html');
+await copyFile('reservas/quartos.js','dist/reservarquarto/quartos/app.js');
 await copyFile('reservas/index.html','dist/clientes/index.html');
 await copyFile('metricas.js','dist/metricas.js');
 const {readFile}=await import('node:fs/promises');

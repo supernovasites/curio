@@ -1,25 +1,36 @@
-import {$, api, weekendLabel, reservationLabel, statuses, message, onSubmit, list, monthlyCalendar} from './common.js';
+import {$, api, weekendLabel, reservationLabel, statuses, message, onSubmit, list, monthlyCalendar, roomPicker, quoteLine} from './common.js';
 
 const reserve = (path,method,data) => api('/api/reserva',path,method,data);
 let dates = new Set(), selected = '', account = null, accountVersion = 0;
+let roomVersion = 0;
+const picker = roomPicker($('#room-picker'),showSelection);
 const renderCalendar = monthlyCalendar($('#calendar'), day => ({
   label:dates.has(day) ? 'Disponível' : 'Indisponível',
   state:dates.has(day) ? 'available' : 'blocked',
   disabled:!account || !dates.has(day),selected:day===selected
-}), day => { selected = day; showSelection(); });
+}), day => { selected = day; loadRooms().catch(error=>message(error.message,true)); });
 
 function showSelection() {
   $('#selected-date').textContent = !account ? 'Acesse sua reserva para selecionar um fim de semana.' :
     selected ? 'Fim de semana escolhido: '+weekendLabel(selected) : 'Escolha um fim de semana disponível.';
-  $('#request-button').disabled = !selected;
+  $('#request-button').disabled = !selected || !picker.selection();
   $('#request-button').hidden = !account;
+}
+
+async function loadRooms() {
+  const version = ++roomVersion, day = selected;
+  $('#room-picker').replaceChildren();
+  picker.reset();
+  if (!account || !day || !dates.has(day)) return;
+  const rooms = await reserve('/rooms?day='+encodeURIComponent(day));
+  if (version===roomVersion) picker.render(rooms);
 }
 
 async function loadDates() {
   dates = new Set(await reserve('/dates'));
   if (!dates.has(selected)) selected = '';
   renderCalendar();
-  showSelection();
+  await loadRooms();
 }
 
 async function loadAccount() {
@@ -38,13 +49,14 @@ async function loadAccount() {
     $('#profile-details').open = false;
     $('#profile-form').reset();
     $('#requests').replaceChildren();
+    await loadRooms();
     return;
   }
   $('#deletion-form').hidden = Boolean(data.deletionRequestedAt);
   $('#deletion-status').hidden = !data.deletionRequestedAt;
   for (const key of ['name','phone','city','state']) $('#profile-form').elements[key].value = account[key] || '';
   list($('#requests'),data.reservations,(item,row) => {
-    item.textContent = reservationLabel(row.day)+' · '+statuses[row.status];
+    item.textContent = reservationLabel(row.day)+' · '+statuses[row.status]+(row.quote ? ' · '+quoteLine(row.quote) : '');
   },'Você ainda não tem solicitações.');
 }
 
@@ -90,15 +102,17 @@ onSubmit($('#deletion-form'),async () => {
   $('#deletion-status').hidden = false;
 });
 onSubmit($('#request-form'),async () => {
-  if (!account || !selected) return;
-  try { await reserve('/requests','POST',{day:selected}); }
+  const room = picker.selection();
+  if (!account || !selected || !room) return;
+  let result;
+  try { result = await reserve('/requests','POST',{day:selected,...room}); }
   catch (error) {
     if (error.status === 401) await loadAccount();
     if (error.status === 409) await loadDates();
     throw error;
   }
   await Promise.all([loadAccount(),loadDates()]);
-  message(account.phone ? 'Intenção enviada. Acompanhe em Minhas solicitações.' : 'Intenção enviada. Adicione um WhatsApp ao seu cadastro para receber instruções de pagamento.');
+  message('Intenção enviada. Orçamento: '+quoteLine(result.quote));
 },showSelection);
 $('#logout').onclick = async () => {
   try {
