@@ -139,11 +139,12 @@ test('public and staff reservations share dates, accounts and approval state',as
     sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
   sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)')
     .run('staff','staff','Equipe',await hashPassword('password-test'),'admin');
-  const env = {DB:adapter(sqlite)};
-  const call = (path,method='GET',input,session) => worker.fetch(new Request('https://curio.test/api'+path,{
+  const env = {DB:adapter(sqlite),ASSETS:{fetch:async()=>new Response('restricted page')}};
+  const request = (path,method='GET',input,session) => worker.fetch(new Request('https://curio.test'+path,{
     method,headers:{Origin:'https://curio.test','Content-Type':'application/json',...(session?{Cookie:session}:{})},
     ...(input?{body:JSON.stringify(input)}:{})
   }),env);
+  const call = (path,...args) => request('/api'+path,...args);
   const session = response => response.headers.get('Set-Cookie').split(';')[0];
   const staff = session(await call('/campanhas/login','POST',{username:'staff',password:'password-test'}));
   const day = '2026-11-27';
@@ -178,9 +179,9 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal(profile.customer.name,input.name);
   assert.equal(profile.customer.cpf,undefined);
   assert.equal((await call('/campanhas/reservations','GET',null,customer)).status,401);
-  const request = await call('/reserva/requests','POST',{day,customerId:'ignored'},customer);
-  assert.equal(request.status,201);
-  const {id} = await request.json();
+  const submitted = await call('/reserva/requests','POST',{day,customerId:'ignored'},customer);
+  assert.equal(submitted.status,201);
+  const {id} = await submitted.json();
   assert.equal((await call('/reserva/requests','POST',{day},customer)).status,409);
   const other = {name:'Ágata Importada',phone:input.phone,birth_date:'1990-04-11',registered_at:'2023-11-10'};
   const created = await call('/campanhas/customers','POST',other,staff);
@@ -191,7 +192,21 @@ test('public and staff reservations share dates, accounts and approval state',as
   const operator = session(await call('/campanhas/login','POST',{username:'operator',password:'operator-test'}));
   assert.equal((await call('/campanhas/customers/search','POST',{},operator)).status,403);
   assert.equal((await call('/campanhas/customers/'+customerId,'PATCH',other,operator)).status,403);
-  const lookup = await (await call('/campanhas/reservations/customers','POST',{q:'agata'},operator)).json();
+  assert.equal((await call('/campanhas/reservations/customers','POST',{q:'agata'},operator)).status,403);
+  assert.equal((await call('/campanhas/reservations/dates','GET',null,operator)).status,403);
+  assert.equal((await call('/campanhas/reservations','POST',{day,customerId},operator)).status,403);
+  const access = await request('/reservarquarto/');
+  assert.equal(access.status,303);
+  assert.equal(new URL(access.headers.get('Location')).search,'?continuar=reservarquarto');
+  assert.equal((await request('/reservarquarto/app.js')).status,303);
+  const oldPage = await request('/gestaodereservaaa/');
+  assert.equal(oldPage.status,308);
+  assert.equal(new URL(oldPage.headers.get('Location')).pathname,'/reservarquarto/');
+  const adminPageCookie = session(await call('/campanhas/me','GET',null,staff));
+  assert.match(adminPageCookie,/^curio_booking_admin=/);
+  assert.equal((await request('/reservarquarto/','GET',null,adminPageCookie)).status,200);
+  assert.equal((await request('/reservarquarto/','GET',null,operator.replace('curio_session','curio_booking_admin'))).status,403);
+  const lookup = await (await call('/campanhas/reservations/customers','POST',{q:'agata'},staff)).json();
   assert.deepEqual(Object.keys(lookup.rows[0]).sort(),['city','id','name','state']);
   const directory = await (await call('/campanhas/customers/search','POST',{},staff)).json();
   assert.deepEqual(directory.rows.map(row=>row.name),['Ágata Importada','Cliente de teste']);
@@ -204,10 +219,10 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal((await call('/campanhas/reservations/'+id,'PATCH',{status:'approved'},staff)).status,400);
   assert.equal((await call('/campanhas/reservations/'+id,'PATCH',{status:'approved',payment:'Pagamento de teste'},staff)).status,200);
   assert.deepEqual(await (await call('/reserva/dates')).json(),[]);
-  const staffReservations = await (await call('/campanhas/reservations','GET',null,operator)).json();
+  const staffReservations = await (await call('/campanhas/reservations','GET',null,staff)).json();
   assert.equal(staffReservations[0].phone,undefined);
   assert.equal(staffReservations[0].payment,undefined);
-  const whatsapp = await call('/campanhas/reservations/'+id+'/whatsapp','GET',null,operator);
+  const whatsapp = await call('/campanhas/reservations/'+id+'/whatsapp','GET',null,staff);
   assert.equal(whatsapp.status,303);
   assert.match(new URL(whatsapp.headers.get('Location')).searchParams.get('text'),/Pagamento de teste/);
   assert.ok(new URL(whatsapp.headers.get('Location')).searchParams.get('text').includes('Entrada: 27/11/2026 às 15h. Saída: 29/11/2026 às 15h.'));
@@ -233,4 +248,6 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.equal((await call('/reserva/login','POST',{cpf:'11144477735',birth_date:other.birth_date})).status,429);
   await call('/reserva/logout','POST',{},customer);
   assert.equal((await call('/reserva/me','GET',null,customer)).status,401);
+  await call('/campanhas/logout','POST',{},staff);
+  assert.equal((await request('/reservarquarto/','GET',null,adminPageCookie)).status,303);
 });

@@ -157,8 +157,7 @@ async function publicReservations(req, env, path) {
 
 async function manageReservations(req, db, path, user, audit) {
   const method = req.method;
-  if ((path === '/customers' || path.startsWith('/customers/')) && user.role !== 'admin')
-    fail(403,'Somente administradores podem consultar ou alterar a base de clientes.');
+  if (user.role !== 'admin') fail(403,'Somente administradores podem gerenciar clientes e reservas.');
   const reservationSearch = path === '/reservations/customers';
   if ((path === '/customers/search' || reservationSearch) && method === 'POST') {
     const input = await body(req), pageSize = 25;
@@ -211,7 +210,6 @@ async function manageReservations(req, db, path, user, audit) {
     return json(results);
   }
   if (path === '/reservations/dates' && method === 'POST') {
-    if (user.role !== 'admin') fail(403,'Somente administradores podem alterar a disponibilidade.');
     const {day,open} = await body(req);
     if (!hotelDay(day) || day < localDay() || typeof open !== 'boolean') fail(400,'Selecione a sexta-feira de entrada do fim de semana, a partir de hoje.');
     await db.prepare('INSERT INTO reservation_dates(day,open) VALUES(?,?) ON CONFLICT(day) DO UPDATE SET open=excluded.open').bind(day,Number(open)).run();
@@ -259,6 +257,19 @@ async function manageReservations(req, db, path, user, audit) {
   fail(404,'Recurso não encontrado.');
 }
 
+function sessionToken(req, name) {
+  const cookie = (req.headers.get('cookie') || '').split(';').map(value=>value.trim()).find(value=>value.startsWith(name+'='));
+  const token = cookie?.slice(name.length+1) || '';
+  return /^[a-f0-9]{64}$/.test(token) ? token : '';
+}
+
+async function staffForToken(db, tokenHash, now) {
+  return db.prepare('SELECT u.id,u.username,u.name,u.role,s.expires_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.active=1').bind(tokenHash,now).first();
+}
+
+const reservationsCookie = (token, maxAge) =>
+  'curio_booking_admin='+token+'; Path=/reservarquarto; HttpOnly; Secure; SameSite=Strict; Max-Age='+maxAge;
+
 async function api(req, env, path) {
   if(!env.DB) fail(503,'Banco ainda não configurado. Vincule o banco D1 à variável DB no Cloudflare.');
   const db=env.DB, now=Date.now(), method=req.method;
@@ -283,11 +294,16 @@ async function api(req, env, path) {
     await audit(u.id,'login',u.id);
     return json({ok:true},200,{'Set-Cookie':`curio_session=${token}; Path=/api/campanhas; HttpOnly; Secure; SameSite=Strict; Max-Age=28800`});
   }
-  const token=(req.headers.get('cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('curio_session='))?.slice(14) || '';
-  const tokenHash=await sha(token);
-  const user=await db.prepare('SELECT u.id,u.username,u.name,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.active=1').bind(tokenHash,now).first();
-  if(!user) fail(401,'Entre para acessar a plataforma.');
-  if(path==='/me' && method==='GET') return json(user);
+  const token = sessionToken(req,'curio_session');
+  if (!token) fail(401,'Entre para acessar a plataforma.');
+  const tokenHash = await sha(token);
+  const user = await staffForToken(db,tokenHash,now);
+  if (!user) fail(401,'Entre para acessar a plataforma.');
+  if (path==='/me' && method==='GET') {
+    const {expires_at,...profile} = user;
+    const headers = user.role==='admin' ? {'Set-Cookie':reservationsCookie(token,Math.ceil((expires_at-now)/1000))} : {};
+    return json(profile,200,headers);
+  }
   if(path==='/customers' || path.startsWith('/customers/') || path==='/reservations' || path.startsWith('/reservations/'))
     return manageReservations(req,db,path,user,audit);
   if(path==='/base-cities' && method==='GET'){
@@ -459,11 +475,19 @@ export default {
   async fetch(req,env) {
     const url = new URL(req.url), path = url.pathname;
     const legacyPage = { '/reserva':'/reservar/', '/reserva/':'/reservar/',
-      '/reservas':'/gestaodereservaaa/', '/reservas/':'/gestaodereservaaa/' }[path];
+      '/reservas':'/reservarquarto/', '/reservas/':'/reservarquarto/',
+      '/gestaodereservaaa':'/reservarquarto/', '/gestaodereservaaa/':'/reservarquarto/' }[path];
     let response;
     try {
       if (legacyPage && ['GET','HEAD'].includes(req.method))
         response = Response.redirect(new URL(legacyPage+url.search,url),308);
+      else if (path==='/reservarquarto' || path.startsWith('/reservarquarto/')) {
+        const token = sessionToken(req,'curio_booking_admin');
+        const user = env.DB && token ? await staffForToken(env.DB,await sha(token),Date.now()) : null;
+        if (!user) response = Response.redirect(new URL('/campanhas/?continuar=reservarquarto',url),303);
+        else if (user.role !== 'admin') fail(403,'Somente administradores podem acessar a gestão de reservas.');
+        else response = await env.ASSETS.fetch(req);
+      }
       else if(path==='/api/metricas' && req.method==='POST') {
         if(req.headers.get('Origin')!==new URL(req.url).origin)fail(403,'Origem inválida.');
         const b=await body(req);
@@ -488,7 +512,7 @@ export default {
     } catch(e) { response=json({error:e.status ? e.message : 'Não foi possível concluir. Tente novamente.'},e.status || 500); }
     const headers=new Headers(response.headers);
     headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','same-origin');headers.set('X-Frame-Options','DENY');
-    if(['/campanhas','/painel','/usuarios','/mensagens','/clientes','/reservas','/reserva','/reservar','/gestaodereservaaa','/api/'].some(p=>path.startsWith(p))) {
+    if(['/campanhas','/painel','/usuarios','/mensagens','/clientes','/reservas','/reserva','/reservar','/gestaodereservaaa','/reservarquarto','/api/'].some(p=>path.startsWith(p))) {
       headers.set('Cache-Control','no-store');
       headers.set('Referrer-Policy','no-referrer');
       headers.set('X-Robots-Tag','noindex');

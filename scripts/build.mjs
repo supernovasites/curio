@@ -1,7 +1,7 @@
 import { mkdir,copyFile,writeFile } from 'node:fs/promises';
 await mkdir('dist/campanhas',{recursive:true});
 await mkdir('dist/painel',{recursive:true});
-for(const path of ['reservar','gestaodereservaaa','clientes']) await mkdir('dist/'+path,{recursive:true});
+for(const path of ['reservar','reservarquarto','clientes']) await mkdir('dist/'+path,{recursive:true});
 await mkdir('dist/assets',{recursive:true});
 for(const file of ["curio-quartos-v1.mp4","curio-quartos-v1.jpg","curio-capela-v1.mp4","curio-capela-v1.jpg","curio-casa-arvore-v1.mp4","curio-casa-arvore-v1.jpg"]) await copyFile('assets/'+file,'dist/assets/'+file);
 await copyFile('assets/campanhas-compartilhamento-v1.png','dist/assets/campanhas-compartilhamento-v1.png');
@@ -10,7 +10,7 @@ for(const f of ['index.html','logo.jpg','curio-aquarela.jpg']) await copyFile(f,
 for(const f of ['index.html','app.js','style.css','csv.js','nav.js','password.js','age.js']) await copyFile(`campanhas/${f}`,`dist/campanhas/${f}`);
 for(const f of ['index.html','app.js'])await copyFile(`painel/${f}`,`dist/painel/${f}`);
 for(const f of ['index.html','app.js','common.js','style.css']) await copyFile('reserva/'+f,'dist/reservar/'+f);
-for(const f of ['index.html','app.js']) await copyFile('reservas/'+f,'dist/gestaodereservaaa/'+f);
+for(const f of ['index.html','app.js']) await copyFile('reservas/'+f,'dist/reservarquarto/'+f);
 await copyFile('reservas/index.html','dist/clientes/index.html');
 await copyFile('metricas.js','dist/metricas.js');
 const {readFile}=await import('node:fs/promises');
@@ -18,5 +18,5 @@ const csv=await readFile('campanhas/csv.js','utf8');
 const worker=await readFile('server/worker.mjs','utf8');
 const age=await readFile('campanhas/age.js','utf8');
 await writeFile('dist/_worker.js',[csv,age,worker.replace(/^import .*;\r?\n/gm,'')].map(source=>source.replaceAll('export function','function')).join('\n'));
-await writeFile('dist/_routes.json',JSON.stringify({version:1,include:['/api/*',...['campanhas','painel','usuarios','mensagens','reserva','reservas','reservar','gestaodereservaaa','clientes'].flatMap(path=>['/'+path,'/'+path+'/*'])],exclude:[]}));
+await writeFile('dist/_routes.json',JSON.stringify({version:1,include:['/api/*',...['campanhas','painel','usuarios','mensagens','reserva','reservas','reservar','gestaodereservaaa','reservarquarto','clientes'].flatMap(path=>['/'+path,'/'+path+'/*'])],exclude:[]}));
 console.log('Build concluído em dist. Nenhum dado pessoal ou credencial incluído.');
