@@ -27,7 +27,7 @@ async function start(){const user=await api('/me');$('#loading-view').hidden=tru
 $('#login-form').onsubmit=async e=>{e.preventDefault();e.submitter.disabled=true;$('#login-error').textContent='';try{const f=new FormData(e.target);await api('/login',{method:'POST',body:JSON.stringify({username:f.get('username'),password:f.get('password')})});e.target.reset();await start();}catch(err){$('#login-error').textContent=err.message;}finally{e.submitter.disabled=false;}};
 document.addEventListener('click',async e=>{if(e.target.closest('#logout')){await api('/logout',{method:'POST',body:'{}'});location.reload();}});
 async function reload(){try{$('#refresh').disabled=true;await Promise.all([load(),loadCities()]);$('#panel-error').textContent='';}catch(err){$('#panel-error').textContent=err.message;}finally{$('#refresh').disabled=false;}}
-$('#period').value='today';
+$('#period').value='7';
 $('#city-details').ontoggle=()=>{if($('#city-details').open)loadCities().catch(err=>{$('#city-summary').textContent=err.message;});};
 $('#period').onchange=reload;$('#refresh').onclick=reload;
 start().catch(err=>{$('#loading-view').hidden=true;if(err.status===401||$('#platform').hidden){$('#platform').hidden=true;$('#login-view').hidden=false;if(err.status!==401)$('#login-error').textContent=err.message;}else $('#panel-error').textContent=err.message;});
