@@ -152,12 +152,14 @@ test('public and staff reservations share dates, accounts and approval state',as
   assert.deepEqual(await (await call('/reserva/dates')).json(),[day]);
   assert.equal((await call('/reserva/requests','POST',{day})).status,401);
   const input = {cpf:'529.982.247-25',birth_date:'1989-01-03',name:'Cliente de teste',city:'Belém',state:'PA',phone:'91999991234'};
-  const registration = await call('/reserva/register','POST',{cpf:input.cpf,birth_date:input.birth_date});
+  assert.equal((await call('/reserva/login','POST',{cpf:input.cpf,birth_date:input.birth_date})).status,401);
+  assert.equal((await call('/reserva/register','POST',{cpf:input.cpf,birth_date:input.birth_date})).status,400);
+  const registration = await call('/reserva/register','POST',input);
   assert.equal(registration.status,202);
   assert.equal(registration.headers.get('Set-Cookie'),null);
   const customer = session(await call('/reserva/login','POST',{cpf:input.cpf,birth_date:input.birth_date}));
-  assert.equal((await call('/reserva/me','PATCH',input,customer)).status,200);
-  const duplicate = await call('/reserva/register','POST',input);
+  assert.equal((await (await call('/reserva/me','GET',null,customer)).json()).customer.phone,'5591999991234');
+  const duplicate = await call('/reserva/register','POST',{...input,name:'Nome diferente'});
   assert.equal(duplicate.status,registration.status);
   assert.deepEqual(await registration.json(),await duplicate.json());
   assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM contacts').get().count,1);

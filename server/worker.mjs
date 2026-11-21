@@ -70,8 +70,8 @@ function customerDetails(input) {
 async function createCustomer(db, input, publicRegistration = false) {
   const cpf = publicRegistration || input.cpf ? readCpf(input.cpf) : null;
   const id = crypto.randomUUID();
-  const details = publicRegistration ? ['Cliente do portal','','','',localDay(),input.birth_date,''] :
-    customerDetails({...input,registered_at:input.registered_at || localDay()});
+  const details = customerDetails({...input,registered_at:input.registered_at || localDay()});
+  if (publicRegistration && !details[1]) fail(400,'Informe um WhatsApp válido com DDD.');
   const statements = [db.prepare('INSERT INTO contacts(name,phone,city,state,registered_at,birth_date,occupation,id,source_key) VALUES(?,?,?,?,?,?,?,?,?)').bind(...details,id,id)];
   if (cpf) statements.push(db.prepare("INSERT INTO customer_accounts(contact_id,cpf,password_hash) VALUES(?,?,'')").bind(id,cpf));
   try {
@@ -112,7 +112,7 @@ async function publicReservations(req, env, path) {
     const cpf = readCpf(input.cpf), birth = dateOnly(input.birth_date);
     if (!birth || birth !== input.birth_date || birth>localDay()) fail(400,'Informe a data de nascimento completa.');
     if (registering) {
-      try { await createCustomer(db,{cpf,birth_date:birth},true); }
+      try { await createCustomer(db,{cpf,birth_date:birth,name:input.name,phone:input.phone,city:input.city,state:input.state},true); }
       catch (error) { if (error.status !== 409) throw error; }
       return json({ok:true},202);
     }

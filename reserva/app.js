@@ -36,18 +36,36 @@ async function loadAccount() {
   },'Você ainda não tem solicitações.');
 }
 
-onSubmit($('#register'),async input => {
-  await reserve('/register','POST',input);
-  $('#register').reset();
-  $('#login').elements.cpf.value = input.cpf;
-  $('#login').elements.birth_date.focus();
-  message('Use CPF e data de nascimento em Acessar meu cadastro.');
-});
-onSubmit($('#login'),async input => {
-  await reserve('/login','POST',input);
-  $('#login').reset();
+const access = $('#login');
+const details = $('#registration-fields');
+function showRegistration(show) {
+  details.hidden = !show;
+  details.disabled = !show;
+  $('#access-button').textContent = show ? 'Cadastrar e acessar' : 'Continuar';
+}
+for (const field of ['cpf','birth_date']) {
+  access.elements[field].addEventListener('input',() => showRegistration(false));
+}
+
+onSubmit(access,async input => {
+  const identity = {cpf:input.cpf,birth_date:input.birth_date};
+  const registering = !details.hidden;
+  if (registering) await reserve('/register','POST',input);
+  try {
+    await reserve('/login','POST',identity);
+  } catch (error) {
+    if (error.status !== 401 || registering) throw error;
+    if (access.elements.cpf.value !== identity.cpf ||
+        access.elements.birth_date.value !== identity.birth_date) return;
+    showRegistration(true);
+    message('Se for seu primeiro acesso, complete o cadastro. Se já tem cadastro, confira o CPF e a data de nascimento.');
+    access.elements.name.focus();
+    return;
+  }
+  access.reset();
+  showRegistration(false);
   await loadAccount();
-  message('Cadastro aberto.');
+  message(selected ? 'Data escolhida. Você já pode enviar a intenção de reserva.' : 'Escolha sua data no calendário.');
 });
 onSubmit($('#profile-form'),async input => {
   await reserve('/me','PATCH',input);
@@ -72,4 +90,5 @@ $('#logout').onclick = async () => {
     message('Você saiu do seu cadastro.');
   } catch (error) { message(error.message,true); }
 };
-Promise.all([loadDates(),loadAccount()]).then(()=>message('')).catch(error=>message(error.message,true));
+message('');
+Promise.all([loadDates(),loadAccount()]).catch(error=>message(error.message,true));
