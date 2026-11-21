@@ -72,7 +72,7 @@
 }
 #registration-fields { min-width: 0; margin: 0 0 .75rem; }
 @media (max-width: 520px) {
-  #booking-stages { grid-template-columns: repeat(3,minmax(0,1fr)); gap: .35rem; }
+  #booking-stages { grid-template-columns: repeat(2,minmax(0,1fr)); gap: .35rem; }
   #booking-stages .metric { min-height: 56px; padding: .4rem .2rem; }
   #booking-stages .stage-label-full { display: none; }
   #booking-stages .stage-label-short { display: block; min-height: 0; font-size: .7rem; line-height: 1.15; }

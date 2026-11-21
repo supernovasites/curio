@@ -8,7 +8,7 @@ const reservedPage = page === 'reservado';
 const customerPage = page === 'clientes';
 const newReservation = $('#new-reservation');
 
-let stage = 'all', catalog = [], selected = '', calendarDates = new Map(), reservations = [], canManage = false;
+let stage = 'pending', catalog = [], selected = '', calendarDates = new Map(), reservations = [], canManage = false;
 let filters = {}, customerPageNumber = 1, searchVersion = 0;
 const dateForm = $('#date-form');
 const registerIntent = $('#register-intent');
@@ -46,11 +46,11 @@ function renderSelected() {
 }
 
 const stages = [
-  ['all','Total de reservas','Total'],['pending','Aguardando aprovação','Pendentes'],
+  ['pending','Aguardando aprovação','Pendentes'],
   ['approved','Aprovadas','Aprovadas'],['confirmed','Confirmadas','Confirmadas'],
   ['closed','Recusadas ou canceladas','Encerradas']
 ];
-const inStage = (row,key) => key==='all' || (key==='closed' ? ['rejected','cancelled'].includes(row.status) : row.status===key);
+const inStage = (row,key) => key==='closed' ? ['rejected','cancelled'].includes(row.status) : row.status===key;
 
 function renderBookings() {
   if (reservedPage) {
