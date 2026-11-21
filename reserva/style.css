@@ -1,0 +1,13 @@
+[hidden] { display: none !important; }
+.reservation-header { padding: 1rem max(1rem, calc((100vw - 1100px) / 2)); background: #fff; }
+.public-reservations { background: #f5f3eb; }
+.public-reservations .workspace { max-width: 1020px; }
+.reservation-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem; align-items: start; }
+.workspace > .card, .workspace > section > .card { margin-block: 1rem; }
+.reservation-form { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; margin-block: .75rem; }
+.reservation-form label { flex: 1 1 10rem; display: grid; gap: .25rem; }
+.reservation-form button { min-height: 2.6rem; }
+.reservation-form textarea { min-height: 5rem; width: 100%; }
+.reservation-list { list-style: none; padding: 0; }
+.reservation-list > li { padding: .75rem 0; border-top: 1px solid #ddd; }
+.reservation-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-block: .5rem; }

@@ -38,7 +38,7 @@ O fluxo mais simples para atendimento manual é o [Clique para conversar oficial
 
 O menu compartilhado atende às rotas `/campanhas/`, `/painel/`, `/usuarios/` e `/mensagens/`. Painel e Usuários exigem perfil de administrador. `/painel/` usa a mesma sessão da plataforma.
 
-A migração `0002_homepage_metrics.sql` adiciona os contadores diários de visualizações da homepage e cliques nos botões de reserva online e WhatsApp. O fuso é America/Fortaleza. A contagem única usa um identificador anônimo em cookie próprio, com validade de um ano. O servidor armazena apenas o hash e deduplica por dia; o total do período usa visitantes distintos. Não há armazenamento de IP nos contadores. Limpar cookies, usar outro navegador ou outro dispositivo gera outro identificador. Os contadores antigos de visualizações ficam preservados no banco, mas não são usados como acessos únicos. O endpoint público aceita somente três eventos; as estatísticas são acessíveis exclusivamente à administração. Os totais são indicativos e podem incluir bots com JavaScript ou testes.
+A migração `0002_homepage_metrics.sql` adiciona os contadores diários de visualizações da homepage e cliques nos botões de reserva online e WhatsApp. O fuso é America/Fortaleza. A contagem única usa um identificador anônimo em cookie próprio, com validade de um ano. O servidor armazena apenas o hash e deduplica por dia; o total do período usa visitantes distintos. Não há armazenamento de IP nos contadores. Limpar cookies, usar outro navegador ou outro dispositivo gera outro identificador. Os contadores antigos de visualizações ficam preservados no banco, mas não são usados como acessos únicos. O endpoint público aceita visualizações e cliques no WhatsApp; as estatísticas são acessíveis exclusivamente à administração. Os totais são indicativos e podem incluir bots com JavaScript ou testes.
 
 A prévia local simula a abertura do WhatsApp sem sair do servidor local. Os testes de fluxo não enviam mensagens.
 
@@ -73,3 +73,11 @@ As listas exibem até 10 clientes por página, incluindo Principal e Aniversaria
 ## Distribuição da base por cidade
 
 O painel administrativo apresenta a quantidade e o percentual por cidade/UF de todos os contatos cadastrados, sem depender do período de acessos. A agregação normaliza maiúsculas, acentos, espaços e nomes/siglas de UF. Cidades homônimas de estados diferentes permanecem separadas. Cadastros sem cidade são agrupados em Não informada. O endpoint exige administrador e retorna somente dados agregados.
+
+## Clientes e reservas
+
+- O painel abre em Hoje, no fuso de Fortaleza. A taxa de WhatsApp divide os cliques no botão de reserva pelos acessos únicos. O painel também oferece Ontem e os períodos anteriores. A distribuição por cidade abre ao clicar no título.
+- A equipe cadastra clientes em `/clientes/`. Clientes também podem criar conta em `/reserva/` e acessar o próprio cadastro com CPF e senha. Novos cadastros entram na base de contatos das campanhas. Cadastros antigos importados por CSV continuam na base de campanhas.
+- Em `/reservas/`, administradores e operadores liberam ou bloqueiam datas, vinculam clientes cadastrados e analisam as intenções. Cada data comporta uma reserva aprovada ou confirmada. Intenções pendentes não ocupam a data.
+- Ao aprovar a intenção, a equipe registra os dados de pagamento e abre a mensagem preenchida no WhatsApp. O envio e a verificação do comprovante são manuais. Depois de confirmar o pagamento na plataforma, a equipe pode enviar a confirmação pelo WhatsApp.
+- Aplique `migrations/0006_reservations.sql` ao banco D1 antes de publicar esta versão.

@@ -2,11 +2,33 @@ import '/campanhas/password.js';
 import {renderHeader} from '/campanhas/nav.js';
 const $=s=>document.querySelector(s);
 async function api(path,options={}){const response=await fetch('/api/campanhas'+path,{credentials:'same-origin',...options,headers:{'Content-Type':'application/json',...options.headers}});const data=await response.json();if(!response.ok){if(response.status===401&&path!=='/login'){$('#loading-view').hidden=true;$('#platform').hidden=true;$('#login-view').hidden=false;}throw Object.assign(Error(data.error||'Não foi possível carregar.'),{status:response.status});}return data;}
-async function load(){const d=await api('/analytics?days='+$('#period').value),byDay=new Map(d.rows.map(r=>[r.day,r])),series=[];for(let i=0;i<d.days;i++){const day=new Date(Date.parse(d.today+'T00:00:00Z')-i*86400000).toISOString().slice(0,10);series.push(byDay.get(day)||{day,acessos:0,reservas:0,whatsapp:0});}const total=series.reduce((a,r)=>({acessos:a.acessos+r.acessos,reservas:a.reservas+r.reservas,whatsapp:a.whatsapp+r.whatsapp}),{acessos:0,reservas:0,whatsapp:0});const stats=[['Acessos únicos',Number(d.unique_visitors||0)],['Cliques',total.reservas+total.whatsapp],['Reserva online',total.reservas],['WhatsApp',total.whatsapp]];$('#dashboard').innerHTML=stats.map(([title,n])=>`<article class="metric"><span>${title}</span><strong>${n.toLocaleString('pt-BR')}</strong></article>`).join('');drawChart(series);$('#daily-rows').innerHTML=series.map(r=>`<tr><td>${r.day.split('-').reverse().join('/')}</td><td>${r.acessos.toLocaleString('pt-BR')}</td><td>${r.reservas.toLocaleString('pt-BR')}</td><td>${r.whatsapp.toLocaleString('pt-BR')}</td></tr>`).join('');$('#updated').textContent='Atualizado às '+new Date().toLocaleTimeString('pt-BR',{timeZone:'America/Fortaleza',hour:'2-digit',minute:'2-digit'})+'. Horário de Fortaleza.';}
+const count = new Intl.NumberFormat('pt-BR');
+const percent = new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:1});
+const rate = (clicks, visits) => visits ? percent.format(clicks/visits) : '—';
+let loadVersion = 0;
+async function load(){
+  const version = ++loadVersion, period = $('#period').value;
+  const query = /^\d+$/.test(period) ? 'days='+period : 'period='+period;
+  const data = await api('/analytics?'+query);
+  if(version !== loadVersion) return;
+  const byDay = new Map(data.rows.map(row => [row.day,row]));
+  const series = Array.from({length:data.days},(_,index)=>{
+    const day = new Date(Date.parse(data.today)-index*86400000).toISOString().slice(0,10);
+    return byDay.get(day) || {day,acessos:0,whatsapp:0};
+  });
+  const clicks = series.reduce((total,row)=>total+row.whatsapp,0);
+  const stats = [['Acessos únicos',count.format(data.unique_visitors)],['Cliques de reserva no WhatsApp',count.format(clicks)],['Taxa de reserva WhatsApp por acesso',rate(clicks,data.unique_visitors)]];
+  $('#dashboard').innerHTML = stats.map(([title,value])=>`<article class="metric"><span>${title}</span><strong>${value}</strong></article>`).join('');
+  drawChart(series);
+  $('#daily-rows').innerHTML = series.map(row=>`<tr><td>${row.day.split('-').reverse().join('/')}</td><td>${count.format(row.acessos)}</td><td>${count.format(row.whatsapp)}</td><td>${rate(row.whatsapp,row.acessos)}</td></tr>`).join('');
+  $('#updated').textContent = 'Atualizado às '+new Date().toLocaleTimeString('pt-BR',{timeZone:'America/Fortaleza',hour:'2-digit',minute:'2-digit'})+'. Horário de Fortaleza.';
+}
 async function start(){const user=await api('/me');$('#loading-view').hidden=true;renderHeader(user,'painel');$('#login-view').hidden=true;$('#platform').hidden=false;if(user.role!=='admin'){$('#panel-content').hidden=true;$('#access-error').hidden=false;return;}await Promise.all([load(),loadCities()]);}
 $('#login-form').onsubmit=async e=>{e.preventDefault();e.submitter.disabled=true;$('#login-error').textContent='';try{const f=new FormData(e.target);await api('/login',{method:'POST',body:JSON.stringify({username:f.get('username'),password:f.get('password')})});e.target.reset();await start();}catch(err){$('#login-error').textContent=err.message;}finally{e.submitter.disabled=false;}};
 document.addEventListener('click',async e=>{if(e.target.closest('#logout')){await api('/logout',{method:'POST',body:'{}'});location.reload();}});
 async function reload(){try{$('#refresh').disabled=true;await Promise.all([load(),loadCities()]);$('#panel-error').textContent='';}catch(err){$('#panel-error').textContent=err.message;}finally{$('#refresh').disabled=false;}}
+$('#period').value='today';
+$('#city-details').ontoggle=()=>{if($('#city-details').open)loadCities().catch(err=>{$('#city-summary').textContent=err.message;});};
 $('#period').onchange=reload;$('#refresh').onclick=reload;
 start().catch(err=>{$('#loading-view').hidden=true;if(err.status===401||$('#platform').hidden){$('#platform').hidden=true;$('#login-view').hidden=false;if(err.status!==401)$('#login-error').textContent=err.message;}else $('#panel-error').textContent=err.message;});
 function drawChart(series){

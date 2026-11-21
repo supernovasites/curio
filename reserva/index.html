@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Reservas · Fazenda Curió</title>
+  <link rel="stylesheet" href="/campanhas/style.css">
+  <link rel="stylesheet" href="/reserva/style.css">
+  <script type="module" src="/reserva/app.js"></script>
+</head>
+<body class="public-reservations">
+  <header class="reservation-header">
+    <a href="/" class="brand"><img class="logo" src="/logo.jpg" alt=""><span>Fazenda Curió</span></a>
+  </header>
+  <main class="workspace">
+    <h1>Reserve sua data</h1>
+    <p id="status" role="status">Carregando…</p>
+    <section class="card">
+      <h2>Datas disponíveis</h2>
+      <form id="request-form" class="reservation-form">
+        <label>Escolha uma data <select name="day" required></select></label>
+        <button id="request-button" type="submit" hidden>Enviar intenção de reserva</button>
+      </form>
+      <p id="date-note"></p>
+    </section>
+    <div id="access" class="reservation-columns">
+      <section class="card">
+        <h2>Já tenho cadastro</h2>
+        <form id="login" class="reservation-form">
+          <label>CPF <input name="cpf" inputmode="numeric" autocomplete="username" maxlength="14" required></label>
+          <label>Senha <input name="password" type="password" autocomplete="current-password" required></label>
+          <button type="submit">Entrar</button>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Criar cadastro</h2>
+        <form id="register" class="reservation-form"></form>
+      </section>
+    </div>
+    <section id="account" class="card" hidden>
+      <h2>Meu cadastro</h2>
+      <p id="profile"></p>
+      <button id="logout" class="secondary" type="button">Sair</button>
+      <h2>Minhas solicitações</h2>
+      <ul id="requests" class="reservation-list"></ul>
+    </section>
+  </main>
+</body>
+</html>

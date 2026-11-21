@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Clientes e reservas · Fazenda Curió</title>
+  <link rel="stylesheet" href="/campanhas/style.css">
+  <link rel="stylesheet" href="/reserva/style.css">
+  <script type="module" src="/reservas/app.js"></script>
+</head>
+<body>
+  <header class="app-header" hidden></header>
+  <main class="workspace">
+    <p id="status" role="status">Carregando…</p>
+    <section id="signin" class="card" hidden>
+      <h1>Entre na plataforma</h1>
+      <form id="login" class="reservation-form">
+        <label>Usuário <input name="username" autocomplete="username" required></label>
+        <label>Senha <input name="password" type="password" autocomplete="current-password" required></label>
+        <button type="submit">Entrar</button>
+      </form>
+    </section>
+    <section id="customers" hidden>
+      <h1>Clientes</h1>
+      <section class="card">
+        <h2>Cadastrar cliente</h2>
+        <form id="customer-form" class="reservation-form"></form>
+      </section>
+      <section class="card">
+        <h2>Clientes cadastrados</h2>
+        <form id="customer-search" class="reservation-form">
+          <label>Buscar por nome ou CPF <input name="q" type="search"></label>
+          <button class="secondary" type="submit">Buscar</button>
+        </form>
+        <ul id="customer-list" class="reservation-list"></ul>
+      </section>
+    </section>
+    <section id="reservations" hidden>
+      <h1>Gestão de reservas</h1>
+      <p><a href="/reserva/">Abrir página de reservas dos clientes</a></p>
+      <section class="card">
+        <h2>Disponibilidade</h2>
+        <form id="date-form" class="reservation-form">
+          <label>Data <input name="day" type="date" required></label>
+          <button type="submit" value="open">Disponibilizar data</button>
+          <button type="submit" value="close" class="secondary">Bloquear data</button>
+        </form>
+        <ul id="date-list" class="reservation-list"></ul>
+      </section>
+      <section class="card">
+        <h2>Registrar intenção de reserva</h2>
+        <form id="reservation-search" class="reservation-form">
+          <label>Buscar cliente por nome ou CPF <input name="q" type="search"></label>
+          <button class="secondary" type="submit">Buscar cliente</button>
+        </form>
+        <form id="new-reservation" class="reservation-form">
+          <label>Cliente <select name="customerId" required></select></label>
+          <label>Data disponível <select name="day" required></select></label>
+          <button type="submit">Registrar intenção</button>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Solicitações e reservas</h2>
+        <ul id="reservation-list" class="reservation-list"></ul>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

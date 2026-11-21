@@ -9,7 +9,13 @@ sqlite.exec(await readFile('migrations/0002_homepage_metrics.sql','utf8'));
 if(!sqlite.prepare('PRAGMA table_info(contacts)').all().some(c=>c.name==='birth_date'))sqlite.exec(await readFile('migrations/0003_contact_details.sql','utf8'));
 sqlite.exec(await readFile('migrations/0004_reserva_realizada.sql','utf8'));
 sqlite.exec(await readFile('migrations/0005_unique_homepage_visits.sql','utf8'));
-const DB={prepare(sql){const stmt=sqlite.prepare(sql);let args=[];const api={bind(...v){args=v;return api;},async first(){return stmt.get(...args)||null;},async all(){return {results:stmt.all(...args)};},async run(){return stmt.run(...args);}};return api;},async batch(statements){sqlite.exec('BEGIN');try{const result=[];for(const s of statements)result.push(await s.run());sqlite.exec('COMMIT');return result;}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
+sqlite.exec(await readFile('migrations/0006_reservations.sql','utf8'));
+const DB={prepare(sql){const stmt=sqlite.prepare(sql);let args=[];const api={
+  bind(...v){args=v;return api;},
+  async first(){return stmt.get(...args)||null;},
+  async all(){return {results:stmt.all(...args)};},
+  async run(){return stmt.columns().length ? api.all() : {meta:stmt.run(...args)};}
+};return api;},async batch(statements){sqlite.exec('BEGIN');try{const result=[];for(const s of statements)result.push(await s.run());sqlite.exec('COMMIT');return result;}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
 const root=resolve('dist'),mime={'.html':'text/html; charset=utf-8','.js':'application/javascript','.css':'text/css','.jpg':'image/jpeg'};
 const ASSETS={async fetch(req){let path=decodeURIComponent(new URL(req.url).pathname);if(path==='/')path='/index.html';let file=resolve(root,'.'+path);if(!file.startsWith(root+'/')&&!file.startsWith(root+'\\'))return new Response('Forbidden',{status:403});try{if((await stat(file)).isDirectory())file=resolve(file,'index.html');return new Response(await readFile(file),{headers:{'Content-Type':mime[extname(file)]||'application/octet-stream'}});}catch{return new Response('Not found',{status:404});}}};
 createServer(async(req,res)=>{try{const chunks=[];for await(const chunk of req)chunks.push(chunk);const request=new Request('http://'+req.headers.host+req.url,{method:req.method,headers:req.headers,...(!['GET','HEAD'].includes(req.method)?{body:Buffer.concat(chunks)}:{})});const response=await worker.fetch(request,{DB,ASSETS});if(response.status===303&&response.headers.get('Location')?.startsWith('https://wa.me/')){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});res.end('Prévia local: abertura do WhatsApp simulada. Nenhuma mensagem foi enviada.');return;}res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));}catch{res.writeHead(500);res.end('Preview error');}}).listen(8788,'127.0.0.1',()=>console.log('Local: http://localhost:8788/campanhas'));
