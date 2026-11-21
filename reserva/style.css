@@ -13,6 +13,8 @@
 .reservation-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-block: .5rem; }
 .calendar-heading { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-block: 1rem; }
 .calendar-heading h3 { margin: 0; text-align: center; text-transform: capitalize; }
+.calendar-title { justify-content: center; }
+.calendar-navigation { margin-bottom: .5rem; }
 .calendar-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%, 13rem),1fr)); gap: .5rem; text-align: center; }
 .calendar-grid .calendar-day { min-height: 5.25rem; padding: .65rem; color: #23362a; background: #e9e6df; overflow-wrap: anywhere; line-height: 1.25; }
 .calendar-grid small { display: block; font-size: .78rem; margin-top: .25rem; }

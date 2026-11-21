@@ -1,3 +1,4 @@
+import {validCpf} from '../reserva/identity.js';
 import {normalizePhone} from '../campanhas/csv.js';
 import {ageOnDate} from '../campanhas/age.js';
 const enc = new TextEncoder();
@@ -40,12 +41,8 @@ const localDay = () => new Intl.DateTimeFormat('en-CA', {
 }).format(new Date());
 
 function readCpf(value) {
-  const cpf = clean(value, 20).replace(/[.\s-]/g, '');
-  if (!/^\d{11}$/.test(cpf) || /^(\d)\1+$/.test(cpf)) fail(400,'Informe um CPF válido.');
-  for (const position of [9, 10]) {
-    const sum = [...cpf.slice(0, position)].reduce((total, digit, index) => total + Number(digit) * (position + 1 - index), 0);
-    if ((sum * 10 % 11) % 10 !== Number(cpf[position])) fail(400,'Informe um CPF válido.');
-  }
+  const cpf = clean(value,20).replace(/[.\s-]/g,'');
+  if (!validCpf(cpf)) fail(400,'Informe um CPF válido.');
   return cpf;
 }
 

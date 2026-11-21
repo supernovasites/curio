@@ -75,7 +75,7 @@ export const today = () => new Intl.DateTimeFormat('en-CA',{
   timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'
 }).format(new Date());
 
-export function monthlyCalendar(root, describe, select) {
+export function monthlyCalendar(root, describe, select, {navigationBelow=false} = {}) {
   let month = new Date(today().slice(0,7)+'-01T12:00:00Z');
   const label = new Intl.DateTimeFormat('pt-BR',{month:'long',year:'numeric',timeZone:'UTC'});
   const monthName = new Intl.DateTimeFormat('pt-BR',{month:'long',timeZone:'UTC'});
@@ -91,10 +91,19 @@ export function monthlyCalendar(root, describe, select) {
     return button;
   }
   const previous = arrow(-1), next = arrow(1);
-  heading.append(previous,title,next);
   const grid = document.createElement('div');
   grid.className = 'calendar-grid';
-  root.replaceChildren(heading,grid);
+  if (navigationBelow) {
+    heading.className = 'calendar-heading calendar-title';
+    heading.append(title);
+    const navigation = document.createElement('div');
+    navigation.className = 'calendar-heading calendar-navigation';
+    navigation.append(previous,next);
+    root.replaceChildren(heading,grid,navigation);
+  } else {
+    heading.append(previous,title,next);
+    root.replaceChildren(heading,grid);
+  }
   function render() {
     title.textContent = label.format(month);
     for (const [button,step] of [[previous,-1],[next,1]]) {

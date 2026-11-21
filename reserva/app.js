@@ -1,4 +1,5 @@
-import {$, api, weekendLabel, reservationLabel, statuses, message, onSubmit, list, monthlyCalendar, roomPicker, quoteLine} from './common.js';
+import {$, api, weekendLabel, reservationLabel, statuses, message, onSubmit, list, monthlyCalendar, roomPicker, quoteLine, today} from './common.js';
+import {validCpf, maskCpf, maskBirth, birthIso} from './identity.js';
 
 const reserve = (path,method,data) => api('/api/reserva',path,method,data);
 let dates = new Set(), selected = '', account = null, accountVersion = 0;
@@ -8,7 +9,7 @@ const renderCalendar = monthlyCalendar($('#calendar'), day => ({
   label:dates.has(day) ? 'Disponível' : 'Indisponível',
   state:dates.has(day) ? 'available' : 'blocked',
   disabled:!account || !dates.has(day),selected:day===selected
-}), day => { selected = day; loadRooms().catch(error=>message(error.message,true)); });
+}), day => { selected = day; loadRooms().catch(error=>message(error.message,true)); },{navigationBelow:true});
 
 function showSelection() {
   $('#selected-date').textContent = !account ? 'Acesse sua reserva para selecionar um fim de semana.' :
@@ -67,20 +68,50 @@ function showRegistration(show) {
   details.disabled = !show;
   $('#access-button').textContent = show ? 'Salvar cadastro' : 'Continuar';
 }
-for (const field of ['cpf','birth_date']) {
-  access.elements[field].addEventListener('input',() => showRegistration(false));
+const cpfField = access.elements.cpf, birthField = access.elements.birth_date;
+const cpfDigits = value => value.replace(/\D/g,'');
+const fields = [
+  [cpfField,maskCpf,value=>validCpf(cpfDigits(value)),'Informe um CPF válido com 11 dígitos.'],
+  [birthField,maskBirth,value=>Boolean(birthIso(value,today())),'Informe uma data válida no formato DD/MM/AAAA.']
+];
+
+function validateIdentity(field, mask, valid, error) {
+  const previous = field.value;
+  const cursor = field.selectionStart;
+  const formatted = mask(previous);
+  if (formatted!==previous) {
+    field.value = formatted;
+    if (cursor!==null && cursor<previous.length) {
+      const digits = cpfDigits(previous.slice(0,cursor)).length;
+      let index=0;
+      while (index<formatted.length && cpfDigits(formatted.slice(0,index)).length<digits) index++;
+      field.setSelectionRange(index,index);
+    }
+  }
+  field.setCustomValidity(formatted && !valid(formatted) ? error : '');
+}
+for (const config of fields) {
+  const [field] = config;
+  const changed = () => {
+    validateIdentity(...config);
+    showRegistration(false);
+  };
+  field.addEventListener('input',changed);
+  field.addEventListener('change',()=>validateIdentity(...config));
 }
 
 onSubmit(access,async input => {
-  const identity = {cpf:input.cpf,birth_date:input.birth_date};
+  for (const config of fields) validateIdentity(...config);
+  if (!access.reportValidity()) return;
+  const identity = {cpf:cpfDigits(cpfField.value),birth_date:birthIso(birthField.value,today())};
   const registering = !details.hidden;
-  if (registering) await reserve('/register','POST',input);
+  if (registering) await reserve('/register','POST',{...input,...identity});
   try {
     await reserve('/login','POST',identity);
   } catch (error) {
     if (error.status !== 401 || registering) throw error;
-    if (access.elements.cpf.value !== identity.cpf ||
-        access.elements.birth_date.value !== identity.birth_date) return;
+    if (cpfDigits(cpfField.value) !== identity.cpf ||
+        birthIso(birthField.value,today()) !== identity.birth_date) return;
     showRegistration(true);
     message('Se for seu primeiro acesso, complete o cadastro. Se já tem cadastro, confira o CPF e a data de nascimento.');
     access.elements.name.focus();

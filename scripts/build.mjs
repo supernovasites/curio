@@ -12,7 +12,7 @@ await copyFile('assets/campanhas-compartilhamento-v2.png','dist/assets/campanhas
 for(const f of ['index.html','logo.jpg','curio-aquarela.jpg']) await copyFile(f,`dist/${f}`);
 for(const f of ['index.html','app.js','style.css','csv.js','nav.js','password.js','age.js']) await copyFile(`campanhas/${f}`,`dist/campanhas/${f}`);
 for(const f of ['index.html','app.js'])await copyFile(`painel/${f}`,`dist/painel/${f}`);
-for(const f of ['index.html','app.js','common.js','style.css']) await copyFile('reserva/'+f,'dist/reservar/'+f);
+for(const f of ['index.html','app.js','common.js','identity.js','style.css']) await copyFile('reserva/'+f,'dist/reservar/'+f);
 for(const f of ['index.html','app.js']) await copyFile('reservas/'+f,'dist/reservarquarto/'+f);
 await mkdir('dist/reservarquarto/reservados',{recursive:true});
 await copyFile('reservas/index.html','dist/reservarquarto/reservados/index.html');
@@ -25,6 +25,7 @@ const {readFile}=await import('node:fs/promises');
 const csv=await readFile('campanhas/csv.js','utf8');
 const worker=await readFile('server/worker.mjs','utf8');
 const age=await readFile('campanhas/age.js','utf8');
-await writeFile('dist/_worker.js',[csv,age,worker.replace(/^import .*;\r?\n/gm,'')].map(source=>source.replaceAll('export function','function')).join('\n'));
+const identity=await readFile('reserva/identity.js','utf8');
+await writeFile('dist/_worker.js',[csv,age,identity,worker.replace(/^import .*;\r?\n/gm,'')].map(source=>source.replaceAll('export function','function')).join('\n'));
 await writeFile('dist/_routes.json',JSON.stringify({version:1,include:['/api/*',...['campanhas','painel','usuarios','mensagens','reserva','reservas','reservar','gestaodereservaaa','reservarquarto','clientes'].flatMap(path=>['/'+path,'/'+path+'/*'])],exclude:[]}));
 console.log('Build concluído em dist. Nenhum dado pessoal ou credencial incluído.');
