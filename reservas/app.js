@@ -1,5 +1,5 @@
 import {renderHeader} from '/campanhas/nav.js';
-import {$, api, formatDay, statuses, message, onSubmit, customerFields, options, list, monthlyCalendar, today} from '/reserva/common.js';
+import {$, api, formatDay, statuses, message, onSubmit, customerFields, options, list, monthlyCalendar, today} from '/reservar/common.js';
 
 const staff = (path,method,data) => api('/api/campanhas',path,method,data);
 const page = location.pathname.startsWith('/clientes') ? 'clientes' : 'reservas';

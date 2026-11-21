@@ -451,10 +451,14 @@ async function api(req, env, path) {
 }
 export default {
   async fetch(req,env) {
-    const path=new URL(req.url).pathname;
+    const url = new URL(req.url), path = url.pathname;
+    const legacyPage = { '/reserva':'/reservar/', '/reserva/':'/reservar/',
+      '/reservas':'/gestaodereservaaa/', '/reservas/':'/gestaodereservaaa/' }[path];
     let response;
     try {
-      if(path==='/api/metricas' && req.method==='POST') {
+      if (legacyPage && ['GET','HEAD'].includes(req.method))
+        response = Response.redirect(new URL(legacyPage+url.search,url),308);
+      else if(path==='/api/metricas' && req.method==='POST') {
         if(req.headers.get('Origin')!==new URL(req.url).origin)fail(403,'Origem inválida.');
         const b=await body(req);
         if(!['visita','whatsapp'].includes(b.kind))fail(400,'Evento inválido.');
@@ -478,7 +482,7 @@ export default {
     } catch(e) { response=json({error:e.status ? e.message : 'Não foi possível concluir. Tente novamente.'},e.status || 500); }
     const headers=new Headers(response.headers);
     headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','same-origin');headers.set('X-Frame-Options','DENY');
-    if(['/campanhas','/painel','/usuarios','/mensagens','/clientes','/reservas','/reserva','/api/'].some(p=>path.startsWith(p))) {
+    if(['/campanhas','/painel','/usuarios','/mensagens','/clientes','/reservas','/reserva','/reservar','/gestaodereservaaa','/api/'].some(p=>path.startsWith(p))) {
       headers.set('Cache-Control','no-store');
       headers.set('Referrer-Policy','no-referrer');
       headers.set('X-Robots-Tag','noindex');
