@@ -18,6 +18,18 @@ async function verify(password, hash) {
   return diff === 0;
 }
 function fail(status, message) { throw Object.assign(new Error(message), {status}); }
+function sameOriginRequest(req) {
+  const requestOrigin = new URL(req.url).origin;
+  const origin = req.headers.get('Origin');
+  if (origin && origin !== 'null') return origin === requestOrigin;
+  const fetchSite = req.headers.get('Sec-Fetch-Site');
+  if (fetchSite) return fetchSite === 'same-origin';
+  const referer = req.headers.get('Referer');
+  if (referer) {
+    try { return new URL(referer).origin === requestOrigin; } catch {}
+  }
+  return false;
+}
 const json = (v, status=200, extra={}) => new Response(JSON.stringify(v), {status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...extra}});
 const clean = (s,max=200) => typeof s === 'string' ? s.trim().slice(0,max) : '';
 const dateOnly = value => {const day=clean(value,40).slice(0,10);return /^\d{4}-\d{2}-\d{2}$/.test(day)&&!Number.isNaN(Date.parse(day))&&new Date(day).toISOString().slice(0,10)===day?day:'';};
@@ -125,7 +137,7 @@ const deletionRequestAction = 'solicitou_exclusao_cliente';
 async function publicReservations(req, env, path) {
   const db = env.DB, method = req.method, now = Date.now();
   if (!db) fail(503,'Reservas indisponíveis.');
-  if (method !== 'GET' && req.headers.get('Origin') !== new URL(req.url).origin) fail(403,'Origem inválida.');
+  if (method !== 'GET' && !sameOriginRequest(req)) fail(403,'Origem inválida.');
   if (path === '/rooms' && method === 'GET') return roomsForDate(db,new URL(req.url).searchParams.get('day'));
   if (path === '/dates' && method === 'GET') {
     const {results} = await db.prepare(availableDates+' ORDER BY d.day').bind(localDay()).all();
@@ -427,7 +439,7 @@ async function api(req, env, path) {
   if(!env.DB) fail(503,'Banco ainda não configurado. Vincule o banco D1 à variável DB no Cloudflare.');
   const db=env.DB, now=Date.now(), method=req.method;
   const write = !['GET','HEAD'].includes(method);
-  if(write && req.headers.get('Origin') !== new URL(req.url).origin) fail(403,'Origem inválida.');
+  if(write && !sameOriginRequest(req)) fail(403,'Origem inválida.');
   const audit = async (uid,action,id) => db.prepare('INSERT INTO audit(user_id,action,entity_id) VALUES(?,?,?)').bind(uid,action,id).run();
   if(path==='/login' && method==='POST') {
     const b=await body(req), username=clean(b.username,60).toLowerCase();
@@ -647,7 +659,7 @@ export default {
         else response = await env.ASSETS.fetch(req);
       }
       else if(path==='/api/metricas' && req.method==='POST') {
-        if(req.headers.get('Origin')!==new URL(req.url).origin)fail(403,'Origem inválida.');
+        if(!sameOriginRequest(req))fail(403,'Origem inválida.');
         const b=await body(req);
         if(!['visita','whatsapp'].includes(b.kind))fail(400,'Evento inválido.');
         if(!env.DB)fail(503,'Indisponível.');
