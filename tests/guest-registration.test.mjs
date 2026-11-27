@@ -9,7 +9,8 @@ const makeCpf=base=>{let digits=base;for(const position of [9,10]){const sum=[..
 const profile=(seed='123456789')=>({entry_date:'2026-12-18',name:'Cliente de teste',birth_date:'1988-02-20',cpf:makeCpf(seed),rg:'RG teste 123',occupation:'Profissional de teste',companions:[{name:'Acompanhante de teste',cpf:makeCpf('234567890'),rg:'RG teste 456',age:12}],dietary_restrictions:'Sem lactose',notes:'Observação de teste'});
 async function setup(t){
  t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,10,27,15)});const sqlite=new DatabaseSync(':memory:');t.after(()=>sqlite.close());
- for(const file of ['0001_campanhas','0003_contact_details','0004_reserva_realizada','0006_reservations','0012_guest_registrations'])sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
+ for(const file of ['0001_campanhas','0003_contact_details','0004_reserva_realizada','0006_reservations','0007_customer_directory','0008_rooms','0012_guest_registrations'])sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
+ sqlite.exec("INSERT INTO reservation_dates(day,open) VALUES('2026-12-18',1),('2026-12-25',0);");
  const password=await hashPassword('test-password');const insert=sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)');insert.run('admin','admin','Administrador',password,'admin');insert.run('operator','operator','Operador',password,'operador');
  const env={DB:adapter(sqlite),ASSETS:{fetch:async req=>new Response(new URL(req.url).pathname)}};
  const call=(path,method='GET',data,cookie,origin='https://curio.test')=>worker.fetch(new Request('https://curio.test'+path,{method,headers:{Origin:origin,'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{})},...(data?{body:JSON.stringify(data)}:{})}),env);
@@ -23,6 +24,7 @@ test('public lodging registration is pending, validated, idempotent and isolated
  assert.equal((await call('/api/cadastro')).status,405);
  assert.equal((await call('/api/cadastro','POST',data,null,'https://evil.test')).status,403);
  for(const invalid of [{entry_date:'2026-02-30'},{entry_date:'2026-12-17'},{entry_date:'2026-12-19'},{entry_date:'2026-12-20'},{birth_date:'2027-01-01'},{name:''},{cpf:'123'},{rg:''},{occupation:''},{companions:[{name:'Sem documentos',age:10}]},{companions:[{name:'Repetido',cpf:data.cpf,rg:'123',age:10}]},{companions:Array(21).fill(data.companions[0])}])assert.equal((await call('/api/cadastro','POST',{...data,...invalid})).status,400);
+ assert.equal((await call('/api/cadastro','POST',{...data,entry_date:'2026-12-25'})).status,409);
  assert.equal((await call('/api/cadastro','POST',data)).status,201);
  assert.equal((await call('/api/cadastro','POST',data)).status,201);
  assert.equal(sqlite.prepare('SELECT COUNT(*) total FROM guest_registrations').get().total,1);
@@ -70,4 +72,17 @@ test('admin manual registration, rejection, legacy edits and CPF conflicts prese
 test('public lodging registration throttles submissions without leaking documents',async t=>{
  const {call}=await setup(t);
  for(let i=0;i<11;i++){const response=await call('/api/cadastro','POST',{...profile(String(123450000+i)),companions:[],request_key:crypto.randomUUID()});assert.equal(response.status,i<10?201:429);const result=await response.json();assert.ok(!('cpf' in result));assert.ok(!('companions' in result));}
+});
+
+test('public registration follows admin availability and remaining room inventory',async t=>{
+ const {call,sqlite}=await setup(t);const data={...profile(),request_key:crypto.randomUUID()};
+ const available=await (await call('/api/reserva/dates')).json();assert.deepEqual(available,['2026-12-18']);
+ sqlite.exec('UPDATE rooms SET stock=0');
+ assert.deepEqual(await (await call('/api/reserva/dates')).json(),[]);
+ assert.equal((await call('/api/cadastro','POST',data)).status,409);
+ sqlite.exec("UPDATE rooms SET stock=1; UPDATE reservation_dates SET open=0 WHERE day='2026-12-18'");
+ assert.equal((await call('/api/cadastro','POST',data)).status,409);
+ sqlite.exec("UPDATE reservation_dates SET open=1 WHERE day='2026-12-18'");
+ assert.equal((await call('/api/cadastro','POST',data)).status,201);
+ assert.equal(sqlite.prepare('SELECT COUNT(*) total FROM reservations').get().total,0);
 });

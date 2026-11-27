@@ -3,7 +3,7 @@ import {validCpf,maskCpf} from '/reservar/identity.js';
 import {bindDateInput,dateToIso,maskDate,sundayCheckout} from '/assets/date-mask.js?v=20261127-friday-checkout';
 export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
  form.classList.add('guest-registration-form');
- form.innerHTML=`<div class="guest-fields">
+ form.innerHTML=`${publicForm?'<section class="guest-date-availability"><h2>Datas disponíveis</h2><p class="help">Escolha um fim de semana liberado pela administração. Entrada na sexta-feira e saída no domingo, às 15h.</p><p class="available-date-status" role="status">Consultando disponibilidade…</p><div class="available-stay-options"></div><button type="button" class="secondary" data-refresh-dates>Atualizar datas</button></section>':''}<div class="guest-fields">
  <label>Data de Entrada · sexta-feira *<input name="entry_date" type="text" inputmode="numeric" placeholder="DD/MM/AAAA" required></label>
  <label>Saída automática · domingo às 15h<input name="exit_date" type="text" placeholder="Preenchida após a entrada" readonly></label>
  <label class="wide">Nome completo *<input name="name" autocomplete="name" maxlength="120" required></label>
@@ -28,10 +28,27 @@ export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
  <p class="form-status" role="status" aria-live="polite"></p>
  <button type="submit" class="primary">${publicForm?'Enviar cadastro para aprovação':profile.id||profile.contact_id?'Salvar cadastro':'Cadastrar cliente'}</button>`;
  const field=name=>form.elements[name],status=form.querySelector('.form-status');
+ let availableDays=null;
  const ageHelp=form.querySelector('#age-help');if(ageHelp){ageHelp.id='age-help-'+crypto.randomUUID();field('age').setAttribute('aria-describedby',ageHelp.id);}
  for(const name of ['entry_date','exit_date','name','birth_date','cpf','rg','occupation','dietary_restrictions','notes'])field(name).value=profile[name]||'';
  for(const name of ['entry_date','birth_date'])bindDateInput(field(name));
- const updateExit=()=>{const exit=sundayCheckout(dateToIso(field('entry_date').value));field('exit_date').value=maskDate(exit);field('entry_date').setCustomValidity(field('entry_date').value.length===10&&!exit?'A entrada deve ser uma sexta-feira válida.':'');};updateExit();field('entry_date').addEventListener('input',updateExit);
+ const updateExit=()=>{const entry=dateToIso(field('entry_date').value),exit=sundayCheckout(entry);field('exit_date').value=maskDate(exit);field('entry_date').setCustomValidity(field('entry_date').value.length===10?(!exit?'A entrada deve ser uma sexta-feira válida.':publicForm&&availableDays&&!availableDays.has(entry)?'Esta data não está disponível. Escolha uma das datas liberadas.':''):'');form.querySelectorAll('[data-available-day]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.availableDay===entry)));};updateExit();field('entry_date').addEventListener('input',updateExit);
+ if(publicForm){
+  const list=form.querySelector('.available-stay-options'),notice=form.querySelector('.available-date-status'),refresh=form.querySelector('[data-refresh-dates]'),submit=form.querySelector('button[type="submit"]');
+  async function loadDates(){
+   refresh.disabled=true;submit.disabled=true;notice.textContent='Consultando disponibilidade…';
+   try{
+    const response=await fetch('/api/reserva/dates',{cache:'no-store'});const days=await response.json();if(!response.ok||!Array.isArray(days))throw Error('Não foi possível consultar as datas. Toque em Atualizar datas para tentar novamente.');
+    if(form.dataset.submitted==='true')return;
+    availableDays=new Set(days.filter(day=>sundayCheckout(day)).sort());list.replaceChildren();
+    for(const day of availableDays){const button=document.createElement('button');button.type='button';button.className='available-stay-option';button.dataset.availableDay=day;button.setAttribute('aria-pressed','false');button.textContent=maskDate(day)+' a '+maskDate(sundayCheckout(day));button.onclick=()=>{field('entry_date').value=maskDate(day);field('entry_date').dispatchEvent(new Event('input',{bubbles:true}));};list.append(button);}
+    notice.textContent=availableDays.size?'Selecione uma data abaixo ou digite uma das datas disponíveis no campo de entrada.':'Não há datas disponíveis no momento. Consulte novamente mais tarde.';
+    submit.disabled=!availableDays.size;updateExit();
+   }catch(error){availableDays=null;notice.textContent=error.message;list.replaceChildren();}
+   finally{refresh.disabled=false;}
+  }
+  refresh.onclick=loadDates;loadDates();
+ }
  const updateAge=()=>{if(field('age'))field('age').value=ageOnDate(dateToIso(field('birth_date').value))??'';};updateAge();field('birth_date').oninput=updateAge;
  const cpfMask=input=>{input.addEventListener('input',()=>{input.value=maskCpf(input.value);input.setCustomValidity('');});};cpfMask(field('cpf'));
  const editor=form.querySelector('.companion-editor'),add=form.querySelector('[data-add-companion]'),list=form.querySelector('.companion-list'),error=form.querySelector('.companion-error');
@@ -63,12 +80,14 @@ export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
   if(!editor.hidden){status.textContent='Salve ou cancele o acompanhante atual antes de enviar o cadastro.';status.classList.add('error');return;}
   data.exit_date=sundayCheckout(data.entry_date);
   if(!data.exit_date){field('entry_date').setCustomValidity('A entrada deve ser uma sexta-feira. A saída será no domingo seguinte, às 15h.');field('entry_date').reportValidity();return;}
+  if(publicForm&&(!availableDays||!availableDays.has(data.entry_date))){status.textContent='Escolha uma das datas disponíveis liberadas pela administração.';status.classList.add('error');return;}
   if(companions.some(c=>c.cpf===data.cpf)){status.textContent='O CPF do titular não pode se repetir nos acompanhantes.';status.classList.add('error');return;}
   data.companions=companions;data.version=profile.version??0;data.request_key=requestKey;delete data.age;
   const button=event.submitter;saving=true;button.disabled=true;
   try{
    await onSave(data);status.textContent=publicForm?'Cadastro enviado. Aguarde a aprovação da administração.':'Cadastro salvo.';
    if(publicForm){
+    form.dataset.submitted='true';
     // Remove submitted personal data from both visible and collapsed controls.
     form.querySelectorAll('input,textarea').forEach(input=>{input.value='';input.defaultValue='';});
     companions.length=0;

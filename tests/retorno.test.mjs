@@ -18,7 +18,7 @@ test('availability requests validate, persist, retry safely and are private to a
  assert.equal((await call('/api/disponibilidade','POST',payload,null,'https://evil.test')).status,403);
  for(const fields of [{name:''},{phone:'123'},{city:''},{request_key:'bad'}])assert.equal((await call('/api/disponibilidade','POST',{...payload,...fields})).status,400);
  const saved=await call('/api/disponibilidade','POST',payload);assert.equal(saved.status,201);
- const target=new URL((await saved.json()).whatsapp_url);assert.equal(target.origin,'https://wa.me');assert.equal(target.pathname,'/5591991400045');assert.match(target.searchParams.get('text'),/Quero receber a disponibilidade de hospedagem/);
+ assert.deepEqual(await saved.json(),{ok:true,status:'aguardando_contato'});
  assert.equal((await call('/api/disponibilidade','POST',payload)).status,201);
  assert.equal(sqlite.prepare('SELECT COUNT(*) total FROM availability_leads').get().total,1);
  assert.equal((await call('/api/disponibilidade','POST',{...payload,city:'Outra'})).status,409);
@@ -29,7 +29,7 @@ test('availability requests validate, persist, retry safely and are private to a
  const me=await call('/api/campanhas/me','GET',null,cookie),returnCookie=me.headers.getSetCookie().find(value=>value.startsWith('curio_return='));
  assert.match(returnCookie,/Path=\/retorno; HttpOnly; Secure; SameSite=Strict/);
  assert.equal((await call('/retorno/','GET',null,returnCookie.split(';')[0])).status,200);
- const list=await (await call('/api/campanhas/return-leads','GET',null,cookie)).json();assert.equal(list.total,1);assert.equal(list.rows[0].city,'Belém');assert.ok(!('phone' in list.rows[0]));assert.ok(!('stay_date' in list.rows[0]));
+ const list=await (await call('/api/campanhas/return-leads','GET',null,cookie)).json();assert.equal(list.total,1);assert.equal(list.rows[0].city,'Belém');assert.equal(list.rows[0].status,'novo');assert.ok(!('phone' in list.rows[0]));assert.ok(!('stay_date' in list.rows[0]));
  const id=list.rows[0].id;
  const dispatch=(input,session=cookie,origin='https://curio.test')=>worker.fetch(new Request('https://curio.test/api/campanhas/return-dispatch',{method:'POST',headers:{Origin:origin,'Content-Type':'application/x-www-form-urlencoded',Cookie:session},body:new URLSearchParams(input)}),env);
  assert.equal((await dispatch({id,message:'Olá'},'',undefined)).status,401);

@@ -470,6 +470,8 @@ async function publicGuestRegistration(req,env){
   await customerLimit(db,await sha('guest-registration-ip:'+(req.headers.get('CF-Connecting-IP')||'local')),10);
   const previous=await db.prepare('SELECT '+guestColumns+' FROM guest_registrations WHERE request_key=?').bind(key).first();
   if(previous){if(JSON.stringify(guestValues(readGuest(previous)))!==JSON.stringify(guestValues(data)))fail(409,'Atualize a página para enviar outro cadastro.');return json({ok:true,status:'pending'},201);}
+  const available=await db.prepare(availableDates+' AND d.day=?').bind(localDay(),data.entry_date).first();
+  if(!available)fail(409,'Esta data não está disponível. Atualize as datas e escolha um fim de semana liberado pela administração.');
   await customerLimit(db,await sha('guest-registration-cpf:'+data.cpf),5);
   try{await db.prepare('INSERT INTO guest_registrations(id,request_key,'+guestColumns+') VALUES(?,?,'+Array(10).fill('?').join(',')+')').bind(crypto.randomUUID(),key,...guestValues(data)).run();}catch(error){guestConflict(error);}
   return json({ok:true,status:'pending'},201);
@@ -564,8 +566,7 @@ async function availabilityRequest(req,env){
     await customerLimit(db,await sha('availability-phone:'+phone),5);
     await db.prepare('INSERT INTO availability_leads(id,request_key,name,phone,city,stay_date) VALUES(?,?,?,?,?,?) ON CONFLICT(request_key) DO NOTHING').bind(crypto.randomUUID(),key,name,phone,city,'').run();
   }
-  const text=`Olá, Carla! Meu nome é ${name}, sou de ${city}. Quero receber a disponibilidade de hospedagem. Meu WhatsApp é +${phone}.`;
-  return json({ok:true,whatsapp_url:'https://wa.me/5591991400045?text='+encodeURIComponent(text)},201);
+  return json({ok:true,status:'aguardando_contato'},201);
 }
 
 async function manageReturn(req,db,path,user,audit){
