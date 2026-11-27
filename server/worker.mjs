@@ -553,7 +553,7 @@ async function availabilityRequest(req,env){
   if(!sameOriginRequest(req))fail(403,'Origem inválida.');
   if(!env.DB)fail(503,'Não foi possível salvar agora. Tente novamente em instantes.');
   const b=await body(req),name=clean(b.name,120),city=clean(b.city,100),phone=normalizePhone(clean(b.phone,40)),stayDate=dateOnly(b.stay_date),key=clean(b.request_key,50);
-  if(!name||!city||!phone||!stayDate||stayDate!==b.stay_date||!/^[a-f0-9-]{36}$/i.test(key))fail(400,'Preencha nome, WhatsApp válido, cidade e uma data válida.');
+  if(!name||!city||!phone||!stayDate||stayDate!==b.stay_date||stayDate<localDay()||!/^[a-f0-9-]{36}$/i.test(key))fail(400,'Preencha nome, WhatsApp válido, cidade e uma data de hospedagem a partir de hoje.');
   const db=env.DB;
   await customerLimit(db,await sha('availability-ip:'+(req.headers.get('CF-Connecting-IP')||'local')),15);
   const previous=await db.prepare('SELECT name,phone,city,stay_date FROM availability_leads WHERE request_key=?').bind(key).first();

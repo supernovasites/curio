@@ -16,7 +16,7 @@ test('availability requests validate, persist, retry safely and are private to a
  const payload={request_key:crypto.randomUUID(),name:'Maria Teste',phone:'(91) 99999-1234',city:'Belém',stay_date:'2026-12-20'};
  assert.equal((await call('/api/disponibilidade','GET')).status,405);
  assert.equal((await call('/api/disponibilidade','POST',payload,null,'https://evil.test')).status,403);
- for(const fields of [{name:''},{phone:'123'},{city:''},{stay_date:'2026-02-30'},{request_key:'bad'}])assert.equal((await call('/api/disponibilidade','POST',{...payload,...fields})).status,400);
+ for(const fields of [{name:''},{phone:'123'},{city:''},{stay_date:'2026-02-30'},{stay_date:'2026-11-26'},{request_key:'bad'}])assert.equal((await call('/api/disponibilidade','POST',{...payload,...fields})).status,400);
  const saved=await call('/api/disponibilidade','POST',payload);assert.equal(saved.status,201);
  const target=new URL((await saved.json()).whatsapp_url);assert.equal(target.origin,'https://wa.me');assert.equal(target.pathname,'/5591991400045');assert.match(target.searchParams.get('text'),/20\/12\/2026/);
  assert.equal((await call('/api/disponibilidade','POST',payload)).status,201);
@@ -46,8 +46,6 @@ test('availability requests validate, persist, retry safely and are private to a
  await call('/api/campanhas/logout','POST',{},cookie);
  assert.equal((await call('/retorno/','GET',null,returnCookie.split(';')[0])).status,303);
  assert.equal((await call('/api/campanhas/return-leads','GET',null,cookie)).status,401);
- assert.equal((await call('/api/disponibilidade','POST',{...payload,request_key:crypto.randomUUID(),stay_date:'1989-09-04'})).status,201);
- assert.equal(sqlite.prepare("SELECT COUNT(*) total FROM availability_leads WHERE stay_date='1989-09-04'").get().total,1);
 });
 
 test('availability rate limit and return pagination',async t=>{
