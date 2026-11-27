@@ -693,6 +693,10 @@ async function api(req, env, path) {
     const start=[new Date(Date.parse(today+'T00:00:00Z')-(days-1)*86400000).toISOString().slice(0,10),'2026-11-16'].sort().at(-1);
     const rows=await db.prepare("SELECT day,SUM(acessos) acessos,SUM(whatsapp) whatsapp FROM (SELECT day,COUNT(*) acessos,0 whatsapp FROM homepage_visits WHERE day>=? AND day<=? GROUP BY day UNION ALL SELECT day,0 acessos,count whatsapp FROM homepage_metrics WHERE day>=? AND day<=? AND kind='whatsapp') GROUP BY day ORDER BY day DESC").bind(start,today,start,today).all();
     const unique=await db.prepare('SELECT COUNT(DISTINCT visitor_hash) total FROM homepage_visits WHERE day>=? AND day<=?').bind(start,today).first();
+    const leads=await db.prepare("SELECT date(created_at,'-3 hours') day,COUNT(*) total FROM availability_leads WHERE date(created_at,'-3 hours')>=? AND date(created_at,'-3 hours')<=? GROUP BY day").bind(start,today).all();
+    const leadCounts=new Map(leads.results.map(row=>[row.day,Number(row.total)]));
+    for(const row of rows.results)row.contatos=leadCounts.get(row.day)||0;
+    for(const row of leads.results)if(!rows.results.some(item=>item.day===row.day))rows.results.push({day:row.day,acessos:0,whatsapp:0,contatos:Number(row.total)});
     return json({rows:rows.results,unique_visitors:unique.total,start,today,days:Math.max(1,Math.round((Date.parse(today)-Date.parse(start))/86400000)+1),timezone:'America/Fortaleza'});
   }
   if(path==='/import' && method==='POST') {
