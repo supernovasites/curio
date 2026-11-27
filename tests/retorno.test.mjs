@@ -42,6 +42,12 @@ test('availability requests validate, persist, retry safely and are private to a
  const whatsapp=new URL(opened.headers.get('Location'));assert.equal(whatsapp.pathname,'/5591999991234');assert.equal(whatsapp.searchParams.get('text'),'Olá, Maria! Vamos consultar?');
  assert.equal((await (await call('/api/campanhas/return-leads','GET',null,cookie)).json()).total,0);
  assert.equal((await (await call('/api/campanhas/return-leads?status=pendentes','GET',null,cookie)).json()).total,1);
+ const pending=(await (await call('/api/campanhas/return-leads?status=pendentes','GET',null,cookie)).json()).rows[0];
+ assert.ok(pending.created_at);assert.ok(pending.last_message_at);
+ const revisit=await worker.fetch(new Request('https://curio.test/api/campanhas/return-open',{method:'POST',headers:{Origin:'https://curio.test','Content-Type':'application/x-www-form-urlencoded',Cookie:cookie},body:new URLSearchParams({id})}),env);
+ assert.equal(revisit.status,303);assert.equal(revisit.headers.get('Location'),'https://wa.me/5591999991234');
+ assert.equal(sqlite.prepare('SELECT stage FROM availability_leads WHERE id=?').get(id).stage,'pendentes');
+ assert.equal(sqlite.prepare("SELECT COUNT(*) total FROM audit WHERE action='consultou_whatsapp_retorno'").get().total,1);
  assert.equal((await call('/api/campanhas/return-leads?status=invalid','GET',null,cookie)).status,400);
  const created=await call('/api/campanhas/campaigns','POST',{name:'Disponibilidade',message:'Olá, {nome}!'},cookie);assert.equal(created.status,201);const template=(await created.json()).id;
  assert.equal((await call('/api/campanhas/campaigns/'+template,'PATCH',{name:'Retorno',message:'Olá, {nome}! Qual a melhor data?'},cookie)).status,200);
