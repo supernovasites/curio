@@ -8,11 +8,11 @@ export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
  <label>Saída automática · domingo às 15h<input name="exit_date" type="text" placeholder="Preenchida após a entrada" readonly></label>
  <label class="wide">Nome completo *<input name="name" autocomplete="name" maxlength="120" required></label>
  <label>Data de Nascimento *<input name="birth_date" type="text" inputmode="numeric" placeholder="DD/MM/AAAA" autocomplete="bday" required></label>
- <label>Idade<input name="age" readonly aria-describedby="age-help"></label>
+ ${publicForm?'':'<label>Idade<input name="age" readonly aria-describedby="age-help"></label>'}
  <label>CPF *<input name="cpf" inputmode="numeric" maxlength="14" required></label>
  <label>RG *<input name="rg" maxlength="30" required></label>
  <label class="wide">Profissão *<input name="occupation" maxlength="120" required></label></div>
- <p id="age-help" class="help">A idade é calculada pela data de nascimento.</p>
+ ${publicForm?'':'<p id="age-help" class="help">A idade é calculada pela data de nascimento.</p>'}
  <details class="guest-companions"><summary>Acompanhantes <span class="companion-count"></span></summary>
  <div class="companion-list"></div><div class="companion-editor" hidden>
  <label>Nome *<input data-companion="name" maxlength="120"></label>
@@ -28,11 +28,11 @@ export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
  <p class="form-status" role="status" aria-live="polite"></p>
  <button type="submit" class="primary">${publicForm?'Enviar cadastro para aprovação':profile.id||profile.contact_id?'Salvar cadastro':'Cadastrar cliente'}</button>`;
  const field=name=>form.elements[name],status=form.querySelector('.form-status');
- const ageHelp=form.querySelector('#age-help');ageHelp.id='age-help-'+crypto.randomUUID();field('age').setAttribute('aria-describedby',ageHelp.id);
+ const ageHelp=form.querySelector('#age-help');if(ageHelp){ageHelp.id='age-help-'+crypto.randomUUID();field('age').setAttribute('aria-describedby',ageHelp.id);}
  for(const name of ['entry_date','exit_date','name','birth_date','cpf','rg','occupation','dietary_restrictions','notes'])field(name).value=profile[name]||'';
  for(const name of ['entry_date','birth_date'])bindDateInput(field(name));
  const updateExit=()=>{const exit=sundayCheckout(dateToIso(field('entry_date').value));field('exit_date').value=maskDate(exit);field('entry_date').setCustomValidity(field('entry_date').value.length===10&&!exit?'A entrada deve ser uma sexta-feira válida.':'');};updateExit();field('entry_date').addEventListener('input',updateExit);
- const updateAge=()=>{field('age').value=ageOnDate(dateToIso(field('birth_date').value))??'';};updateAge();field('birth_date').oninput=updateAge;
+ const updateAge=()=>{if(field('age'))field('age').value=ageOnDate(dateToIso(field('birth_date').value))??'';};updateAge();field('birth_date').oninput=updateAge;
  const cpfMask=input=>{input.addEventListener('input',()=>{input.value=maskCpf(input.value);input.setCustomValidity('');});};cpfMask(field('cpf'));
  const editor=form.querySelector('.companion-editor'),add=form.querySelector('[data-add-companion]'),list=form.querySelector('.companion-list'),error=form.querySelector('.companion-error');
  let companions=(profile.companions||[]).map(c=>({...c})),editing=-1,saving=false;
