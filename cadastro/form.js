@@ -1,11 +1,10 @@
 import {ageOnDate} from '/campanhas/age.js';
 import {validCpf,maskCpf} from '/reservar/identity.js';
-import {bindDateInput,dateToIso,maskDate,sundayCheckout} from '/assets/date-mask.js?v=20261127-friday-checkout';
+import {bindDateInput,dateToIso,maskDate,sundayCheckout} from '/assets/date-mask.js?v=20261127-compact-stay-v2';
 export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
  form.classList.add('guest-registration-form');
- form.innerHTML=`${publicForm?'<section class="guest-date-availability"><h2>Datas disponíveis</h2><p class="help">Escolha um fim de semana liberado pela administração. Entrada na sexta-feira e saída no domingo, às 15h.</p><p class="available-date-status" role="status">Consultando disponibilidade…</p><div class="available-stay-options"></div><button type="button" class="secondary" data-refresh-dates>Atualizar datas</button></section>':''}<div class="guest-fields">
- <label>Data de Entrada · sexta-feira *<input name="entry_date" type="text" inputmode="numeric" placeholder="DD/MM/AAAA" required></label>
- <label>Saída automática · domingo às 15h<input name="exit_date" type="text" placeholder="Preenchida após a entrada" readonly></label>
+ form.innerHTML=`${publicForm?'<section class="guest-date-availability"><h2>Sua hospedagem</h2><p class="available-date-status" role="status">Consultando datas…</p><div class="available-stay-options"></div><div class="stay-date-controls"><span class="stay-date-count"></span><button type="button" class="stay-next" data-next-date disabled>Ver próxima</button></div><button type="button" class="stay-refresh" data-refresh-dates>Atualizar datas</button></section>':''}<div class="guest-fields">
+ ${publicForm?'<input name="entry_date" type="hidden"><input name="exit_date" type="hidden">':'<label>Data de Entrada · sexta-feira *<input name="entry_date" type="text" inputmode="numeric" placeholder="DD/MM/AAAA" required></label><label>Saída automática · domingo às 15h<input name="exit_date" type="text" placeholder="Preenchida após a entrada" readonly></label>'}
  <label class="wide">Nome completo *<input name="name" autocomplete="name" maxlength="120" required></label>
  <label>Data de Nascimento *<input name="birth_date" type="text" inputmode="numeric" placeholder="DD/MM/AAAA" autocomplete="bday" required></label>
  ${publicForm?'':'<label>Idade<input name="age" readonly aria-describedby="age-help"></label>'}
@@ -22,27 +21,30 @@ export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
  <p class="companion-error error" role="alert"></p>
  <div class="dialog-actions"><button type="button" class="secondary" data-cancel-companion>Cancelar</button><button type="button" class="primary" data-save-companion>Salvar acompanhante</button></div></div>
  <button type="button" class="secondary" data-add-companion>Adicionar acompanhante</button></details>
- <label>Restrições alimentares<textarea name="dietary_restrictions" rows="3" maxlength="2000" placeholder="Informe alergias, intolerâncias ou outras restrições alimentares."></textarea></label>
- <label>Observações<textarea name="notes" rows="3" maxlength="2000"></textarea></label>
- ${publicForm?'<p class="help">Seus dados serão usados pela Fazenda Curió para revisar o cadastro e organizar a hospedagem. O envio não confirma uma reserva.</p>':''}
+ <label>Restrições alimentares<textarea name="dietary_restrictions" rows="2" maxlength="2000" placeholder="Alergias ou intolerâncias"></textarea></label>
+ <label>Observações<textarea name="notes" rows="2" maxlength="2000"></textarea></label>
+ ${publicForm?'<p class="help">Cadastro sujeito à aprovação. Não confirma reserva.</p>':''}
  <p class="form-status" role="status" aria-live="polite"></p>
  <button type="submit" class="primary">${publicForm?'Enviar cadastro para aprovação':profile.id||profile.contact_id?'Salvar cadastro':'Cadastrar cliente'}</button>`;
  const field=name=>form.elements[name],status=form.querySelector('.form-status');
  let availableDays=null;
  const ageHelp=form.querySelector('#age-help');if(ageHelp){ageHelp.id='age-help-'+crypto.randomUUID();field('age').setAttribute('aria-describedby',ageHelp.id);}
  for(const name of ['entry_date','exit_date','name','birth_date','cpf','rg','occupation','dietary_restrictions','notes'])field(name).value=profile[name]||'';
- for(const name of ['entry_date','birth_date'])bindDateInput(field(name));
+ bindDateInput(field('birth_date'));if(!publicForm)bindDateInput(field('entry_date'));
  const updateExit=()=>{const entry=dateToIso(field('entry_date').value),exit=sundayCheckout(entry);field('exit_date').value=maskDate(exit);field('entry_date').setCustomValidity(field('entry_date').value.length===10?(!exit?'A entrada deve ser uma sexta-feira válida.':publicForm&&availableDays&&!availableDays.has(entry)?'Esta data não está disponível. Escolha uma das datas liberadas.':''):'');form.querySelectorAll('[data-available-day]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.availableDay===entry)));};updateExit();field('entry_date').addEventListener('input',updateExit);
  if(publicForm){
   const list=form.querySelector('.available-stay-options'),notice=form.querySelector('.available-date-status'),refresh=form.querySelector('[data-refresh-dates]'),submit=form.querySelector('button[type="submit"]');
+  const next=form.querySelector('[data-next-date]'),counter=form.querySelector('.stay-date-count');let dateIndex=0;
+  function showDate(index){const days=[...availableDays];if(!days.length)return;dateIndex=(index+days.length)%days.length;const day=days[dateIndex],exit=sundayCheckout(day);list.innerHTML='<div class="stay-period"><div><span>Entrada · sexta</span><strong>'+maskDate(day)+'</strong><small>15h</small></div><div><span>Saída · domingo</span><strong>'+maskDate(exit)+'</strong><small>15h</small></div></div>';counter.textContent=(dateIndex+1)+' de '+days.length;next.disabled=days.length<2;field('entry_date').value=maskDate(day);field('entry_date').dispatchEvent(new Event('input',{bubbles:true}));}
+  next.onclick=()=>showDate(dateIndex+1);
   async function loadDates(){
    refresh.disabled=true;submit.disabled=true;notice.textContent='Consultando disponibilidade…';
    try{
-    const response=await fetch('/api/reserva/dates',{cache:'no-store'});const days=await response.json();if(!response.ok||!Array.isArray(days))throw Error('Não foi possível consultar as datas. Toque em Atualizar datas para tentar novamente.');
+    const response=await fetch('/api/reserva/dates',{cache:'no-store'});const days=await response.json();if(!response.ok||!Array.isArray(days))throw Error('Não foi possível consultar as datas. Tente atualizar.');
     if(form.dataset.submitted==='true')return;
     availableDays=new Set(days.filter(day=>sundayCheckout(day)).sort());list.replaceChildren();
-    for(const day of availableDays){const button=document.createElement('button');button.type='button';button.className='available-stay-option';button.dataset.availableDay=day;button.setAttribute('aria-pressed','false');button.textContent=maskDate(day)+' a '+maskDate(sundayCheckout(day));button.onclick=()=>{field('entry_date').value=maskDate(day);field('entry_date').dispatchEvent(new Event('input',{bubbles:true}));};list.append(button);}
-    notice.textContent=availableDays.size?'Selecione uma data abaixo ou digite uma das datas disponíveis no campo de entrada.':'Não há datas disponíveis no momento. Consulte novamente mais tarde.';
+    notice.textContent=availableDays.size?'':'Nenhuma data disponível no momento.';
+    next.disabled=!availableDays.size;counter.textContent='';if(availableDays.size)showDate(0);else{field('entry_date').value='';field('exit_date').value='';}
     submit.disabled=!availableDays.size;updateExit();
    }catch(error){availableDays=null;notice.textContent=error.message;list.replaceChildren();}
    finally{refresh.disabled=false;}
