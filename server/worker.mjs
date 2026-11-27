@@ -695,7 +695,8 @@ async function api(req, env, path) {
     const unique=await db.prepare('SELECT COUNT(DISTINCT visitor_hash) total FROM homepage_visits WHERE day>=? AND day<=?').bind(start,today).first();
     const leads=await db.prepare("SELECT date(created_at,'-3 hours') day,COUNT(*) total FROM availability_leads WHERE date(created_at,'-3 hours')>=? AND date(created_at,'-3 hours')<=? GROUP BY day").bind(start,today).all();
     const leadCounts=new Map(leads.results.map(row=>[row.day,Number(row.total)]));
-    for(const row of rows.results)row.contatos=leadCounts.get(row.day)||0;
+    // Before the form rollout, historical WhatsApp clicks represent contact requests.
+    for(const row of rows.results){row.contatos=row.day<'2026-11-27'?Number(row.whatsapp)||0:leadCounts.get(row.day)||0;row.contatos_origem=row.day<'2026-11-27'?'whatsapp_historico':'formulario';}
     for(const row of leads.results)if(!rows.results.some(item=>item.day===row.day))rows.results.push({day:row.day,acessos:0,whatsapp:0,contatos:Number(row.total)});
     return json({rows:rows.results,unique_visitors:unique.total,start,today,days:Math.max(1,Math.round((Date.parse(today)-Date.parse(start))/86400000)+1),timezone:'America/Fortaleza'});
   }
