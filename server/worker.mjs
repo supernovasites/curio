@@ -439,9 +439,11 @@ const returnCookie=(token,maxAge)=>'curio_return='+token+'; Path=/retorno; HttpO
 
 function guestData(input){
   if(!input||typeof input!=='object')fail(400,'Cadastro inválido.');
-  const entry=dateOnly(input.entry_date),exit=dateOnly(input.exit_date),birth=dateOnly(input.birth_date),age=ageOnDate(birth);
+  const entry=dateOnly(input.entry_date),birth=dateOnly(input.birth_date),age=ageOnDate(birth);
+  if(!hotelDay(entry)||entry!==input.entry_date)fail(400,'A data de entrada deve ser uma sexta-feira. A saída é no domingo seguinte, às 15h.');
+  const exit=new Date(Date.parse(entry+'T12:00:00Z')+2*86400000).toISOString().slice(0,10);
   const name=clean(input.name,120),cpf=readCpf(input.cpf),rg=clean(input.rg,30),occupation=clean(input.occupation,120);
-  if(!entry||entry!==input.entry_date||!exit||exit!==input.exit_date||exit<=entry||!birth||birth!==input.birth_date||age===null||age<0||age>125||!name||!rg||!occupation)fail(400,'Confira as datas, nome completo, nascimento, CPF, RG e profissão. A saída deve ser posterior à entrada.');
+  if(!birth||birth!==input.birth_date||age===null||age<0||age>125||!name||!rg||!occupation)fail(400,'Confira nome completo, nascimento, CPF, RG e profissão.');
   if(!Array.isArray(input.companions)||input.companions.length>20)fail(400,'Informe até 20 acompanhantes.');
   const seen=new Set([cpf]);
   const companions=input.companions.map(person=>{

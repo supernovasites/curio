@@ -6,7 +6,7 @@ import worker,{hashPassword} from '../server/worker.mjs';
 
 function adapter(sqlite){return {prepare(sql){const statement=sqlite.prepare(sql);let args=[];const query={bind(...values){args=values;return query;},async first(){return statement.get(...args)||null;},async all(){return {results:statement.all(...args)};},async run(){return {meta:statement.run(...args)};}};return query;},async batch(statements){sqlite.exec('BEGIN');try{const result=[];for(const statement of statements)result.push(await statement.run());sqlite.exec('COMMIT');return result;}catch(error){sqlite.exec('ROLLBACK');throw error;}}};}
 const makeCpf=base=>{let digits=base;for(const position of [9,10]){const sum=[...digits].reduce((total,digit,index)=>total+Number(digit)*(position+1-index),0);digits+=String((sum*10%11)%10);}return digits;};
-const profile=(seed='123456789')=>({entry_date:'2026-12-18',exit_date:'2026-12-20',name:'Cliente de teste',birth_date:'1988-02-20',cpf:makeCpf(seed),rg:'RG teste 123',occupation:'Profissional de teste',companions:[{name:'Acompanhante de teste',cpf:makeCpf('234567890'),rg:'RG teste 456',age:12}],dietary_restrictions:'Sem lactose',notes:'Observação de teste'});
+const profile=(seed='123456789')=>({entry_date:'2026-12-18',name:'Cliente de teste',birth_date:'1988-02-20',cpf:makeCpf(seed),rg:'RG teste 123',occupation:'Profissional de teste',companions:[{name:'Acompanhante de teste',cpf:makeCpf('234567890'),rg:'RG teste 456',age:12}],dietary_restrictions:'Sem lactose',notes:'Observação de teste'});
 async function setup(t){
  t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,10,27,15)});const sqlite=new DatabaseSync(':memory:');t.after(()=>sqlite.close());
  for(const file of ['0001_campanhas','0003_contact_details','0004_reserva_realizada','0006_reservations','0012_guest_registrations'])sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
@@ -22,7 +22,7 @@ test('public lodging registration is pending, validated, idempotent and isolated
  assert.equal((await call('/cadastro')).status,200);
  assert.equal((await call('/api/cadastro')).status,405);
  assert.equal((await call('/api/cadastro','POST',data,null,'https://evil.test')).status,403);
- for(const invalid of [{entry_date:'2026-02-30'},{exit_date:'2026-12-18'},{birth_date:'2027-01-01'},{name:''},{cpf:'123'},{rg:''},{occupation:''},{companions:[{name:'Sem documentos',age:10}]},{companions:[{name:'Repetido',cpf:data.cpf,rg:'123',age:10}]},{companions:Array(21).fill(data.companions[0])}])assert.equal((await call('/api/cadastro','POST',{...data,...invalid})).status,400);
+ for(const invalid of [{entry_date:'2026-02-30'},{entry_date:'2026-12-17'},{entry_date:'2026-12-19'},{entry_date:'2026-12-20'},{birth_date:'2027-01-01'},{name:''},{cpf:'123'},{rg:''},{occupation:''},{companions:[{name:'Sem documentos',age:10}]},{companions:[{name:'Repetido',cpf:data.cpf,rg:'123',age:10}]},{companions:Array(21).fill(data.companions[0])}])assert.equal((await call('/api/cadastro','POST',{...data,...invalid})).status,400);
  assert.equal((await call('/api/cadastro','POST',data)).status,201);
  assert.equal((await call('/api/cadastro','POST',data)).status,201);
  assert.equal(sqlite.prepare('SELECT COUNT(*) total FROM guest_registrations').get().total,1);
@@ -31,7 +31,7 @@ test('public lodging registration is pending, validated, idempotent and isolated
  const endpoint='/api/campanhas/guest-registrations';
  assert.equal((await call(endpoint)).status,401);assert.equal((await call(endpoint,'GET',null,operator)).status,403);
  const list=await (await call(endpoint,'GET',null,admin)).json();assert.equal(list.total,1);assert.ok(!('cpf' in list.rows[0]));
- const id=list.rows[0].id;let saved=await (await call(endpoint+'/'+id,'GET',null,admin)).json();assert.equal(saved.age,38);assert.equal(saved.companions[0].age,12);assert.equal(saved.status,'pending');
+ const id=list.rows[0].id;let saved=await (await call(endpoint+'/'+id,'GET',null,admin)).json();assert.equal(saved.age,38);assert.equal(saved.exit_date,'2026-12-20');assert.equal(saved.companions[0].age,12);assert.equal(saved.status,'pending');
  assert.equal((await call(endpoint+'/'+id,'PATCH',{...data,notes:'Revisado',version:1},admin)).status,200);
  assert.equal((await call(endpoint+'/'+id+'/approve','POST',{version:1},admin)).status,409);
  assert.equal((await call(endpoint+'/'+id+'/approve','POST',{version:2},operator)).status,403);

@@ -1,11 +1,11 @@
 import {ageOnDate} from '/campanhas/age.js';
 import {validCpf,maskCpf} from '/reservar/identity.js';
-import {bindDateInput,dateToIso} from '/assets/date-mask.js';
+import {bindDateInput,dateToIso,maskDate,sundayCheckout} from '/assets/date-mask.js';
 export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
  form.classList.add('guest-registration-form');
  form.innerHTML=`<div class="guest-fields">
- <label>Data de Entrada *<input name="entry_date" type="text" inputmode="numeric" placeholder="DD/MM/AAAA" required></label>
- <label>Data de Saída *<input name="exit_date" type="text" inputmode="numeric" placeholder="DD/MM/AAAA" required></label>
+ <label>Data de Entrada · sexta-feira *<input name="entry_date" type="text" inputmode="numeric" placeholder="DD/MM/AAAA" required></label>
+ <label>Saída automática · domingo às 15h<input name="exit_date" type="text" placeholder="Preenchida após a entrada" readonly></label>
  <label class="wide">Nome completo *<input name="name" autocomplete="name" maxlength="120" required></label>
  <label>Data de Nascimento *<input name="birth_date" type="text" inputmode="numeric" placeholder="DD/MM/AAAA" autocomplete="bday" required></label>
  <label>Idade<input name="age" readonly aria-describedby="age-help"></label>
@@ -30,7 +30,8 @@ export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
  const field=name=>form.elements[name],status=form.querySelector('.form-status');
  const ageHelp=form.querySelector('#age-help');ageHelp.id='age-help-'+crypto.randomUUID();field('age').setAttribute('aria-describedby',ageHelp.id);
  for(const name of ['entry_date','exit_date','name','birth_date','cpf','rg','occupation','dietary_restrictions','notes'])field(name).value=profile[name]||'';
- for(const name of ['entry_date','exit_date','birth_date'])bindDateInput(field(name));
+ for(const name of ['entry_date','birth_date'])bindDateInput(field(name));
+ const updateExit=()=>{const exit=sundayCheckout(dateToIso(field('entry_date').value));field('exit_date').value=maskDate(exit);field('entry_date').setCustomValidity(field('entry_date').value.length===10&&!exit?'A entrada deve ser uma sexta-feira válida.':'');};updateExit();field('entry_date').addEventListener('input',updateExit);
  const updateAge=()=>{field('age').value=ageOnDate(dateToIso(field('birth_date').value))??'';};updateAge();field('birth_date').oninput=updateAge;
  const cpfMask=input=>{input.addEventListener('input',()=>{input.value=maskCpf(input.value);input.setCustomValidity('');});};cpfMask(field('cpf'));
  const editor=form.querySelector('.companion-editor'),add=form.querySelector('[data-add-companion]'),list=form.querySelector('.companion-list'),error=form.querySelector('.companion-error');
@@ -50,17 +51,18 @@ export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
   person.age=Number(person.age);if(editing<0)companions.push(person);else companions[editing]=person;closeEditor();renderCompanions();add.focus();
  };
  let requestKey=crypto.randomUUID();form.addEventListener('input',()=>{requestKey=crypto.randomUUID();});
- form.addEventListener('reset',()=>{companions=[];closeEditor();renderCompanions();requestKey=crypto.randomUUID();queueMicrotask(updateAge);});
+ form.addEventListener('reset',()=>{companions=[];closeEditor();renderCompanions();requestKey=crypto.randomUUID();queueMicrotask(()=>{updateAge();updateExit();});});
  form.addEventListener('submit',async event=>{
   event.preventDefault();if(saving)return;status.classList.remove('error');status.textContent='';
   const data=Object.fromEntries(new FormData(form));data.cpf=data.cpf.replace(/\D/g,'');
-  for(const name of ['entry_date','exit_date','birth_date']){
+  for(const name of ['entry_date','birth_date']){
    data[name]=dateToIso(data[name]);
    if(!data[name]){field(name).setCustomValidity('Digite uma data válida no formato DD/MM/AAAA.');field(name).reportValidity();return;}
   }
   if(!validCpf(data.cpf)){field('cpf').setCustomValidity('Informe um CPF válido.');field('cpf').reportValidity();return;}
   if(!editor.hidden){status.textContent='Salve ou cancele o acompanhante atual antes de enviar o cadastro.';status.classList.add('error');return;}
-  if(data.exit_date<=data.entry_date){field('exit_date').setCustomValidity('A saída deve ser posterior à entrada.');field('exit_date').reportValidity();return;}
+  data.exit_date=sundayCheckout(data.entry_date);
+  if(!data.exit_date){field('entry_date').setCustomValidity('A entrada deve ser uma sexta-feira. A saída será no domingo seguinte, às 15h.');field('entry_date').reportValidity();return;}
   if(companions.some(c=>c.cpf===data.cpf)){status.textContent='O CPF do titular não pode se repetir nos acompanhantes.';status.classList.add('error');return;}
   data.companions=companions;data.version=profile.version??0;data.request_key=requestKey;delete data.age;
   const button=event.submitter;saving=true;button.disabled=true;
@@ -80,6 +82,4 @@ export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
   catch(err){status.textContent=err.message;status.classList.add('error');}
   finally{saving=false;if(!publicForm||!status.textContent.startsWith('Cadastro enviado'))button.disabled=false;}
  });
- field('exit_date').oninput=()=>field('exit_date').setCustomValidity('');
- field('entry_date').oninput=()=>field('exit_date').setCustomValidity('');
 }

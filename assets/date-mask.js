@@ -14,3 +14,9 @@ export function bindDateInput(input){
  input.removeAttribute('min');input.removeAttribute('max');input.value=maskDate(input.value);
  input.addEventListener('input',()=>{input.value=maskDate(input.value);input.setCustomValidity('');});
 }
+export function sundayCheckout(entry){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(entry||''))return '';
+ const date=new Date(entry+'T12:00:00Z');
+ if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==entry||date.getUTCDay()!==5)return '';
+ return new Date(date.getTime()+2*86400000).toISOString().slice(0,10);
+}
