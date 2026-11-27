@@ -667,7 +667,7 @@ async function api(req, env, path) {
     headers.append('Set-Cookie',returnCookie(token,age));
     const response=json(profile);for(const cookie of headers.getSetCookie())response.headers.append('Set-Cookie',cookie);return response;
   }
-  if(path==='/return-leads'||path==='/return-dispatch')return manageReturn(req,db,path,user,audit);
+  if(path==='/return-leads'||path==='/return-dispatch'||path==='/return-outcome')return manageReturn(req,db,path,user,audit);
   if(path==='/guest-registrations'||path.startsWith('/guest-registrations/')||path.startsWith('/guest-profiles/'))return manageGuests(req,db,path,user,audit);
   if(path==='/rooms' || path.startsWith('/rooms/') || path==='/customers' || path.startsWith('/customers/') || path==='/reservations' || path.startsWith('/reservations/'))
     return manageReservations(req,db,path,user,audit);
