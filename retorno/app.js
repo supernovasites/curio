@@ -1,50 +1,29 @@
-import {renderHeader} from '/campanhas/nav.js?v=20261127-reservation-map';
-const $=selector=>document.querySelector(selector);
-const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let messages=[],selected='',status='novo',page=1,pages=1,sequence=0,rows=[];
+import {renderHeader} from '/campanhas/nav.js?v=20261127-return-stage-v2';
+const $=s=>document.querySelector(s);
+const escape=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const labels={principal:'Na principal',pendentes:'Pendentes',interessados:'Demonstrou interesse',sem_interesse:'Sem interesse',sem_resposta:'Não respondeu',reservas:'Reservas realizadas'};
+let messages=[],selected='',status='principal',page=1,pages=1,rows=[],sequence=0;
 const drafts=new Map();
-function notify(text){$('#notice').textContent=text;$('#notice').hidden=false;}
-async function api(path,options={}){
- const res=await fetch('/api/campanhas'+path,{credentials:'same-origin',...options,headers:{'Content-Type':'application/json',...options.headers}});
- if(res.status===401){location.replace('/campanhas/?continuar=retorno');throw Error('Entre para acessar.');}
- const data=await res.json();if(!res.ok)throw Error(data.error||'Não foi possível concluir.');return data;
-}
+function notify(t){$('#notice').textContent=t;$('#notice').hidden=false;}
+async function api(path,options={}){const r=await fetch('/api/campanhas'+path,{credentials:'same-origin',...options,headers:{'Content-Type':'application/json',...options.headers}});let d;try{d=await r.json()}catch{throw Error('Não foi possível conectar.')}if(r.status===401){location.replace('/campanhas/?continuar=retorno');throw Error('Entre para acessar.')}if(!r.ok)throw Error(d.error||'Não foi possível concluir.');return d}
 const send=(path,data,method='POST')=>api(path,{method,body:JSON.stringify(data)});
-const protect=fn=>async event=>{try{await fn(event);}catch(error){notify(error.message);}};
-function messageFor(row){return drafts.get(selected+':'+row.id)??(messages.find(m=>m.id===selected)?.message||'Olá, {nome}! Recebemos seu pedido de disponibilidade. Vamos conversar sobre sua hospedagem?').replace(/\{nome\}/gi,()=>row.name.trim().split(/\s+/)[0]);}
+function messageFor(row){return drafts.get(selected+':'+row.id)??messages.find(m=>m.id===selected)?.message.replaceAll('{nome}',row.name.trim().split(/\s+/)[0])??'Olá, {nome}! Recebemos seu pedido de disponibilidade. Vamos conversar sobre sua hospedagem?'.replaceAll('{nome}',row.name.trim().split(/\s+/)[0]);}
 function renderRows(){
- $('#contact-list').innerHTML=rows.length?rows.map(row=>`<article class="guest"><button class="guest-name" aria-expanded="false" aria-controls="lead-${escape(row.id)}"><span class="guest-identity"><strong>${escape(row.name)}</strong><span class="return-meta"><span>Cidade: ${escape(row.city)}</span></span><span class="return-state">${row.status==='novo'?'Novo pedido':'WhatsApp aberto'}</span></span></button><div class="guest-details" id="lead-${escape(row.id)}" hidden><form class="return-send" method="POST" action="/api/campanhas/return-dispatch" target="_blank" rel="noopener"><input type="hidden" name="id" value="${escape(row.id)}"><label>Mensagem para este cliente<textarea name="message" class="return-message" rows="5" maxlength="4000" required data-draft="${escape(selected+':'+row.id)}">${escape(messageFor(row))}</textarea></label><button type="submit" class="primary">Enviar mensagem pelo WhatsApp</button></form></div></article>`).join(''):'<p class="empty">Nenhum pedido nesta lista.</p>';
+ $('#contact-list').innerHTML=rows.length?rows.map(row=>{
+  const details=status==='principal'?'<form class="return-send" method="POST" action="/api/campanhas/return-dispatch" target="_blank" rel="noopener"><input type="hidden" name="id" value="'+escape(row.id)+'"><label>Mensagem para este cliente<textarea name="message" rows="5" maxlength="4000" required data-draft="'+escape(selected+':'+row.id)+'">'+escape(messageFor(row))+'</textarea></label><button type="submit" class="primary">Enviar mensagem pelo WhatsApp</button></form>':
+  status==='pendentes'?'<a class="primary inline-action" href="/api/campanhas/contact?id='+encodeURIComponent(row.id)+'" target="_blank" rel="noopener">Consultar retorno no WhatsApp</a><form class="outcome-form" data-id="'+escape(row.id)+'"><fieldset><legend>Qual foi o retorno?</legend>'+[['interessados','Demonstrou interesse'],['sem_interesse','Sem interesse'],['sem_resposta','Não respondeu']].map(([v,l])=>'<label class="result-option"><input type="radio" name="stage" value="'+v+'" required>'+l+'</label>').join('')+'</fieldset><label>Observações<textarea name="notes" rows="2" maxlength="2000" placeholder="Próximo passo da conversa">'+escape(row.notes)+'</textarea></label><button type="submit" class="primary">Salvar retorno</button></form>':
+  status==='interessados'?'<div class="finished-details"><strong>Demonstrou interesse</strong>'+(row.notes?'<p>'+escape(row.notes)+'</p>':'')+'</div><form class="reservation-form" data-id="'+escape(row.id)+'"><label class="check"><input type="checkbox" name="reserved" required> Reserva realizada</label><label>Observações<textarea name="notes" rows="2" maxlength="2000">'+escape(row.notes)+'</textarea></label><button type="submit" class="primary">Mover para Reservas realizadas</button></form>':
+  '<div class="finished-details"><strong>'+labels[row.stage]+'</strong>'+(row.notes?'<p>'+escape(row.notes)+'</p>':'')+'</div>';
+  return '<article class="guest"><button class="guest-name" aria-expanded="false"><span class="guest-identity"><strong>'+escape(row.name)+'</strong><span class="return-meta"><span>Cidade: '+escape(row.city)+'</span><span>'+escape(row.status==='contatado'?'Mensagem aberta no WhatsApp':'Prospectado na homepage')+'</span></span></span></button><div class="guest-details" hidden>'+details+'</div></article>'
+ }).join(''):'<p class="empty">Nenhum contato nesta etapa.</p>';
 }
-async function contacts(){
- const current=++sequence;const data=await api('/return-leads?'+new URLSearchParams({status,page,q:$('#search').value}));if(current!==sequence)return;
- rows=data.rows;page=data.page;pages=data.pages;renderRows();$('#contact-count').textContent=data.total+' '+(data.total===1?'pedido':'pedidos');
- $('#count-new').textContent=Number(data.summary?.novo||0).toLocaleString('pt-BR');$('#count-contacted').textContent=Number(data.summary?.contatado||0).toLocaleString('pt-BR');$('#count-all').textContent=Number(data.summary?.todos??data.total).toLocaleString('pt-BR');$('#page-label').textContent=`Página ${page} de ${pages}`;$('#prev').disabled=page<=1;$('#next').disabled=page>=pages;
-}
-async function loadMessages(){
- messages=await api('/campaigns');if(!messages.some(m=>m.id===selected))selected=messages[0]?.id||'';
- $('#message-select').replaceChildren(new Option('Mensagem de disponibilidade padrão',''),...messages.map(m=>new Option(m.name,m.id)));$('#message-select').value=selected;
- $('#saved-messages').innerHTML=messages.map(m=>`<article class="saved-message card"><h3>${escape(m.name)}</h3><p>${escape(m.message)}</p><button class="secondary" data-edit="${escape(m.id)}">Editar mensagem</button></article>`).join('')||'<p>Nenhuma mensagem salva.</p>';
-}
-document.addEventListener('click',protect(async event=>{
- if(event.target.closest('#logout')){await send('/logout',{});location.replace('/campanhas/');return;}
- const tab=event.target.closest('[data-status]');if(tab){status=tab.dataset.status;page=1;document.querySelectorAll('[data-status]').forEach(b=>{const active=b===tab;b.setAttribute('aria-pressed',String(active));b.classList.toggle('selected',active);});await contacts();}
- const guest=event.target.closest('.guest-name');if(guest){const open=guest.getAttribute('aria-expanded')!=='true';guest.setAttribute('aria-expanded',String(open));guest.nextElementSibling.hidden=!open;}
- const edit=event.target.closest('[data-edit]');if(edit){const m=messages.find(m=>m.id===edit.dataset.edit),f=$('#message-form');f.elements.id.value=m.id;f.elements.name.value=m.name;f.elements.message.value=m.message;$('#message-editor').open=true;f.elements.name.focus();}
-}));
-$('#contact-list').addEventListener('input',event=>{if(event.target.matches('[data-draft]'))drafts.set(event.target.dataset.draft,event.target.value);});
-$('#contact-list').addEventListener('submit',event=>{
- const form=event.target;if(!form.matches('.return-send'))return;const button=event.submitter;setTimeout(()=>button.disabled=true,0);
- // This form opens WhatsApp in another tab; refresh the recorded state without sending messages.
- let attempts=0;const poll=async()=>{try{await contacts();}catch{}if(++attempts<3)setTimeout(poll,1000);else button.disabled=false;};setTimeout(poll,800);
-});
-$('#message-select').onchange=event=>{selected=event.target.value;renderRows();};
-let timer;$('#search').oninput=()=>{clearTimeout(timer);timer=setTimeout(protect(async()=>{page=1;await contacts();}),250);};
-$('#prev').onclick=protect(async()=>{page--;await contacts();});$('#next').onclick=protect(async()=>{page++;await contacts();});
-$('#clear-message').onclick=()=>{const form=$('#message-form');form.reset();form.elements.id.value='';form.elements.name.focus();};
-$('#message-form').onsubmit=protect(async event=>{
- event.preventDefault();const form=event.target,button=event.submitter,id=form.elements.id.value;button.disabled=true;
- try{const result=await send('/campaigns'+(id?'/'+id:''),{name:form.elements.name.value,message:form.elements.message.value},id?'PATCH':'POST');selected=id||result.id;form.reset();form.elements.id.value='';await loadMessages();renderRows();notify('Mensagem salva e disponível para os próximos contatos.');}finally{button.disabled=false;}
-});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')contacts().catch(error=>notify(error.message));});
-async function start(){const user=await api('/me');renderHeader(user,'retorno');await loadMessages();await contacts();$('#loading').hidden=true;$('#platform').hidden=false;}
-start().catch(error=>{$('#loading').textContent='Não foi possível carregar. Atualize a página para tentar novamente.';notify(error.message);});
+async function contacts(){const n=++sequence,d=await api('/return-leads?'+new URLSearchParams({status,page,q:$('#search').value}));if(n!==sequence)return;rows=d.rows;page=d.page;pages=d.pages;renderRows();$('#contact-count').textContent=d.total+' '+(d.total===1?'contato':'contatos');$('#page-label').textContent='Página '+page+' de '+pages;$('#prev').disabled=page<=1;$('#next').disabled=page>=pages;for(const key of Object.keys(labels))$('#count-'+key).textContent=Number(d.summary?.[key]||0).toLocaleString('pt-BR');}
+async function loadMessages(){messages=await api('/campaigns');if(!messages.some(m=>m.id===selected))selected=messages[0]?.id||'';$('#message-select').replaceChildren(new Option('Mensagem de disponibilidade padrão',''),...messages.map(m=>new Option(m.name,m.id)));$('#message-select').value=selected;$('#saved-messages').innerHTML=messages.map(m=>'<article class="saved-message card"><h3>'+escape(m.name)+'</h3><p>'+escape(m.message)+'</p><button class="secondary" data-edit="'+escape(m.id)+'">Editar mensagem</button></article>').join('')||'<p>Nenhuma mensagem salva.</p>';}
+document.addEventListener('click',async e=>{try{if(e.target.closest('#logout')){await send('/logout',{});location.replace('/campanhas/');return}const card=e.target.closest('[data-status]');if(card){status=card.dataset.status;page=1;document.querySelectorAll('[data-status]').forEach(b=>{const on=b===card;b.classList.toggle('selected',on);b.setAttribute('aria-pressed',String(on))});await contacts()}const guest=e.target.closest('.guest-name');if(guest){const d=guest.nextElementSibling,open=d.hidden;document.querySelectorAll('.guest-details').forEach(x=>x.hidden=true);document.querySelectorAll('.guest-name').forEach(x=>x.setAttribute('aria-expanded','false'));d.hidden=!open;guest.setAttribute('aria-expanded',String(open))}const edit=e.target.closest('[data-edit]');if(edit){const m=messages.find(x=>x.id===edit.dataset.edit),f=$('#message-form');f.elements.id.value=m.id;f.elements.name.value=m.name;f.elements.message.value=m.message;$('#message-editor').open=true}}catch(err){notify(err.message)}});
+$('#contact-list').addEventListener('input',e=>{if(e.target.dataset.draft)drafts.set(e.target.dataset.draft,e.target.value)});
+$('#contact-list').addEventListener('submit',async e=>{const f=e.target;if(f.matches('.return-send')){const b=e.submitter;setTimeout(()=>b.disabled=true,0);notify('Abrindo WhatsApp. O contato foi movido para Pendentes.');setTimeout(()=>contacts().catch(()=>{}),900);return}if(f.matches('.outcome-form')){e.preventDefault();const b=e.submitter;b.disabled=true;try{const d=new FormData(f);await send('/return-outcome',{id:f.dataset.id,stage:d.get('stage'),notes:d.get('notes')});await contacts();notify('Retorno classificado.')}catch(err){notify(err.message)}finally{b.disabled=false}}if(f.matches('.reservation-form')){e.preventDefault();if(!f.elements.reserved.checked)return;const b=e.submitter;b.disabled=true;try{await send('/return-outcome',{id:f.dataset.id,stage:'reservas',notes:f.elements.notes.value});await contacts();notify('Reserva registrada.')}catch(err){notify(err.message)}finally{b.disabled=false}}});
+$('#message-select').onchange=e=>{selected=e.target.value;renderRows()};let timer;$('#search').oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>{page=1;contacts().catch(e=>notify(e.message))},250)};$('#prev').onclick=()=>{page=Math.max(1,page-1);contacts().catch(e=>notify(e.message))};$('#next').onclick=()=>{page=Math.min(pages,page+1);contacts().catch(e=>notify(e.message))};
+$('#message-form').onsubmit=async e=>{e.preventDefault();const f=e.target,b=e.submitter;b.disabled=true;try{const id=f.elements.id.value,d=await send('/campaigns'+(id?'/'+id:''),{name:f.elements.name.value,message:f.elements.message.value},id?'PATCH':'POST');selected=id||d.id;f.reset();f.elements.id.value='';await loadMessages();renderRows();notify('Mensagem salva.')}catch(err){notify(err.message)}finally{b.disabled=false}};
+$('#clear-message').onclick=()=>{const f=$('#message-form');f.reset();f.elements.id.value=''};
+async function start(){const u=await api('/me');renderHeader(u,'retorno');await loadMessages();await contacts();$('#loading').hidden=true;$('#platform').hidden=false}
+start().catch(e=>{notify(e.message);$('#loading').textContent='Não foi possível carregar. Atualize a página para tentar novamente.'});
