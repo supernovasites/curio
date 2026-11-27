@@ -60,7 +60,19 @@ export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
   if(companions.some(c=>c.cpf===data.cpf)){status.textContent='O CPF do titular não pode se repetir nos acompanhantes.';status.classList.add('error');return;}
   data.companions=companions;data.version=profile.version??0;data.request_key=requestKey;delete data.age;
   const button=event.submitter;saving=true;button.disabled=true;
-  try{await onSave(data);status.textContent=publicForm?'Cadastro enviado. Aguarde a aprovação da administração.':'Cadastro salvo.';if(publicForm){form.querySelectorAll('input,textarea,button').forEach(input=>input.disabled=true);}}
+  try{
+   await onSave(data);status.textContent=publicForm?'Cadastro enviado. Aguarde a aprovação da administração.':'Cadastro salvo.';
+   if(publicForm){
+    // Remove submitted personal data from both visible and collapsed controls.
+    form.querySelectorAll('input,textarea').forEach(input=>{input.value='';input.defaultValue='';});
+    companions.length=0;
+    const confirmation=document.createElement('div');confirmation.className='registration-confirmation';confirmation.setAttribute('role','status');confirmation.tabIndex=-1;
+    const title=document.createElement('h2');title.textContent='Cadastro enviado';
+    const description=document.createElement('p');description.textContent='Aguarde a aprovação da administração. Seus dados não ficam disponíveis para consulta nesta página pública.';
+    const home=document.createElement('a');home.href='/';home.className='primary';home.textContent='Voltar ao site';
+    confirmation.append(title,description,home);form.replaceChildren(confirmation);form.parentElement?.querySelector('.required-note')?.remove();confirmation.focus();
+   }
+  }
   catch(err){status.textContent=err.message;status.classList.add('error');}
   finally{saving=false;if(!publicForm||!status.textContent.startsWith('Cadastro enviado'))button.disabled=false;}
  });
