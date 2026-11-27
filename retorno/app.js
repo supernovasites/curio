@@ -1,4 +1,4 @@
-import {renderHeader} from '/campanhas/nav.js?v=20261127-notification';
+import {renderHeader} from '/campanhas/nav.js?v=20261127-campaign-notification';
 const $=s=>document.querySelector(s);
 const escape=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const labels={principal:'Na principal',pendentes:'Pendentes',interessados:'Demonstrou interesse',sem_interesse:'Sem interesse',sem_resposta:'Não respondeu',reservas:'Reservas realizadas'};

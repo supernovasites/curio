@@ -1,4 +1,4 @@
-import {renderHeader} from '/campanhas/nav.js?v=20261127-notification';
+import {renderHeader} from '/campanhas/nav.js?v=20261127-campaign-notification';
 import {$,api,message,onSubmit,money} from '/reservar/common.js';
 
 const staff = (path,method,data) => api('/api/campanhas',path,method,data);

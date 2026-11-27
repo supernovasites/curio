@@ -1,4 +1,4 @@
-import {renderHeader} from '/campanhas/nav.js?v=20261127-notification';
+import {renderHeader} from '/campanhas/nav.js?v=20261127-campaign-notification';
 import {guestForm} from '/cadastro/form.js?v=20261127-stay-navigation';
 const $=selector=>document.querySelector(selector);
 let approvalPage=1,customerPage=1,customerQuery='',approvalsVersion=0,customersVersion=0;
