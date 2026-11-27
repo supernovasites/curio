@@ -15,8 +15,10 @@ for(const f of ['index.html','app.js','style.css','csv.js','nav.js','password.js
 for(const f of ['index.html','app.js'])await copyFile(`painel/${f}`,`dist/painel/${f}`);
 for(const f of ['index.html','app.js','common.js','identity.js','style.css']) await copyFile('reserva/'+f,'dist/reservar/'+f);
 for(const f of ['index.html','app.js']) await copyFile('reservas/'+f,'dist/reservarquarto/'+f);
-await mkdir('dist/reservarquarto/reservados',{recursive:true});
-await copyFile('reservas/index.html','dist/reservarquarto/reservados/index.html');
+await mkdir('dist/reservarquarto/mapa',{recursive:true});
+await copyFile('reservas/mapa.html','dist/reservarquarto/mapa/index.html');
+await copyFile('reservas/mapa.js','dist/reservarquarto/mapa/app.js');
+await copyFile('reservas/mapa.css','dist/reservarquarto/mapa/style.css');
 await mkdir('dist/reservarquarto/quartos',{recursive:true});
 await copyFile('reservas/quartos.html','dist/reservarquarto/quartos/index.html');
 await copyFile('reservas/quartos.js','dist/reservarquarto/quartos/app.js');

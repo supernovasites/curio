@@ -293,6 +293,19 @@ async function manageReservations(req, db, path, user, audit) {
   const method = req.method;
   if (user.role !== 'admin') fail(403,'Somente administradores podem gerenciar clientes e reservas.');
   if (path === '/rooms' || path.startsWith('/rooms/')) return manageRooms(req,db,path,audit,user);
+  if(path==='/reservations/map'&&method==='GET'){
+    const month=new URL(req.url).searchParams.get('month')||localDay().slice(0,7);
+    if(!/^(19|20)\d{2}-(0[1-9]|1[0-2])$/.test(month))fail(400,'Selecione um mês válido.');
+    const start=month+'-01',next=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5)),1)).toISOString().slice(0,10);
+    const [rooms,dates,reservations,holds]=await Promise.all([
+      db.prepare('SELECT id,name,capacity,stock FROM rooms ORDER BY name COLLATE NOCASE,id').all(),
+      db.prepare("SELECT day,open FROM reservation_dates WHERE day>=date(?,'-2 days') AND day<? ORDER BY day").bind(start,next).all(),
+      db.prepare("SELECT r.id,r.day,r.status,r.room_id,c.name FROM reservations r JOIN contacts c ON c.id=r.contact_id WHERE r.status IN ('approved','confirmed') AND r.day>=date(?,'-2 days') AND r.day<? ORDER BY r.day,r.id").bind(start,next).all(),
+      db.prepare("SELECT day,room_id,COUNT(*) count FROM reservations WHERE status IN ('pending','approved','confirmed') AND day>=date(?,'-2 days') AND day<? GROUP BY day,room_id").bind(start,next).all()
+    ]);
+    await audit(user.id,'consultou_mapa_reservas',month);
+    return json({month,today:localDay(),rooms:rooms.results,dates:dates.results,reservations:reservations.results,holds:holds.results});
+  }
   if (path === '/reservations/rooms' && method === 'GET') return roomsForDate(db,new URL(req.url).searchParams.get('day'));
   const reservationSearch = path === '/reservations/customers';
   if ((path === '/customers/search' || reservationSearch) && method === 'POST') {
@@ -808,6 +821,7 @@ export default {
   async fetch(req,env) {
     const url = new URL(req.url), path = url.pathname;
     const legacyPage = { '/reserva':'/reservar/', '/reserva/':'/reservar/',
+      '/reservarquarto/reservados':'/reservarquarto/mapa/', '/reservarquarto/reservados/':'/reservarquarto/mapa/',
       '/gestaodereservaaa':'/reservarquarto/', '/gestaodereservaaa/':'/reservarquarto/' }[path];
     let response;
     try {
@@ -831,7 +845,7 @@ export default {
         const token = sessionToken(req,'curio_booking_admin');
         const user = env.DB && token ? await staffForToken(env.DB,await sha(token),Date.now()) : null;
         if (!user) {
-          const next = path.startsWith('/reservarquarto/reservados') ? 'reservados' :
+          const next = path.startsWith('/reservarquarto/mapa') ? 'mapa' : path.startsWith('/reservarquarto/reservados') ? 'reservados' :
             path.startsWith('/reservarquarto/quartos') ? 'quartos' : 'reservarquarto';
           response = Response.redirect(new URL('/campanhas/?continuar='+next,url),303);
         }

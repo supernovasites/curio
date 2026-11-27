@@ -1,4 +1,4 @@
-import {renderHeader} from '/campanhas/nav.js';
+import {renderHeader} from '/campanhas/nav.js?v=20261127-reservation-map';
 const $=selector=>document.querySelector(selector);
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let messages=[],selected='',status='novo',page=1,pages=1,sequence=0,rows=[];

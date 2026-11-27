@@ -1,4 +1,4 @@
-import {renderHeader} from '/campanhas/nav.js';
+import {renderHeader} from '/campanhas/nav.js?v=20261127-reservation-map';
 import {$,api,message,onSubmit,money} from '/reservar/common.js';
 
 const staff = (path,method,data) => api('/api/campanhas',path,method,data);
