@@ -17,7 +17,8 @@ function renderRows(){
 }
 async function contacts(){
  const current=++sequence;const data=await api('/return-leads?'+new URLSearchParams({status,page,q:$('#search').value}));if(current!==sequence)return;
- rows=data.rows;page=data.page;pages=data.pages;renderRows();$('#contact-count').textContent=data.total+' '+(data.total===1?'pedido':'pedidos');$('#page-label').textContent=`Página ${page} de ${pages}`;$('#prev').disabled=page<=1;$('#next').disabled=page>=pages;
+ rows=data.rows;page=data.page;pages=data.pages;renderRows();$('#contact-count').textContent=data.total+' '+(data.total===1?'pedido':'pedidos');
+ $('#count-new').textContent=Number(data.summary?.novo||0).toLocaleString('pt-BR');$('#count-contacted').textContent=Number(data.summary?.contatado||0).toLocaleString('pt-BR');$('#count-all').textContent=Number(data.summary?.todos??data.total).toLocaleString('pt-BR');$('#page-label').textContent=`Página ${page} de ${pages}`;$('#prev').disabled=page<=1;$('#next').disabled=page>=pages;
 }
 async function loadMessages(){
  messages=await api('/campaigns');if(!messages.some(m=>m.id===selected))selected=messages[0]?.id||'';
@@ -26,7 +27,7 @@ async function loadMessages(){
 }
 document.addEventListener('click',protect(async event=>{
  if(event.target.closest('#logout')){await send('/logout',{});location.replace('/campanhas/');return;}
- const tab=event.target.closest('[data-status]');if(tab){status=tab.dataset.status;page=1;document.querySelectorAll('[data-status]').forEach(b=>b.setAttribute('aria-pressed',String(b===tab)));await contacts();}
+ const tab=event.target.closest('[data-status]');if(tab){status=tab.dataset.status;page=1;document.querySelectorAll('[data-status]').forEach(b=>{const active=b===tab;b.setAttribute('aria-pressed',String(active));b.classList.toggle('selected',active);});await contacts();}
  const guest=event.target.closest('.guest-name');if(guest){const open=guest.getAttribute('aria-expanded')!=='true';guest.setAttribute('aria-expanded',String(open));guest.nextElementSibling.hidden=!open;}
  const edit=event.target.closest('[data-edit]');if(edit){const m=messages.find(m=>m.id===edit.dataset.edit),f=$('#message-form');f.elements.id.value=m.id;f.elements.name.value=m.name;f.elements.message.value=m.message;$('#message-editor').open=true;f.elements.name.focus();}
 }));

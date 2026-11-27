@@ -596,7 +596,9 @@ async function manageReturn(req,db,path,user,audit){
     const total=(await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first()).total;
     const pages=Math.max(1,Math.ceil(total/10)),page=Math.min(pages,Math.max(1,parseInt(url.searchParams.get('page'))||1));
     const rows=await db.prepare('SELECT id,name,city,status,created_at,contacted_at'+from+' ORDER BY created_at DESC,id LIMIT 10 OFFSET ?').bind(...args,(page-1)*10).all();
-    return json({rows:rows.results,total,page,pages});
+    const summaryRows=await db.prepare('SELECT status,COUNT(*) total FROM availability_leads'+(q?' WHERE (name LIKE ? OR city LIKE ?)':'')+' GROUP BY status').bind(...(q?['%'+q+'%','%'+q+'%']:[])).all();
+    const summary={novo:0,contatado:0};for(const row of summaryRows.results)summary[row.status]=Number(row.total||0);summary.todos=summary.novo+summary.contatado;
+    return json({rows:rows.results,total,page,pages,summary});
   }
   if(path==='/return-dispatch'&&req.method==='POST'){
     if(!req.headers.get('content-type')?.includes('application/x-www-form-urlencoded'))fail(415,'Formulário inválido.');
