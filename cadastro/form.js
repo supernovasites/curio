@@ -1,6 +1,6 @@
 import {ageOnDate} from '/campanhas/age.js';
 import {validCpf,maskCpf} from '/reservar/identity.js';
-import {bindDateInput,dateToIso,maskDate,sundayCheckout} from '/assets/date-mask.js';
+import {bindDateInput,dateToIso,maskDate,sundayCheckout} from '/assets/date-mask.js?v=20261127-friday-checkout';
 export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
  form.classList.add('guest-registration-form');
  form.innerHTML=`<div class="guest-fields">
