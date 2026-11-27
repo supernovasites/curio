@@ -43,7 +43,7 @@ test('availability requests validate, persist, retry safely and are private to a
  assert.equal((await (await call('/api/campanhas/return-leads','GET',null,cookie)).json()).total,0);
  assert.equal((await (await call('/api/campanhas/return-leads?status=pendentes','GET',null,cookie)).json()).total,1);
  const pending=(await (await call('/api/campanhas/return-leads?status=pendentes','GET',null,cookie)).json()).rows[0];
- assert.ok(pending.created_at);assert.ok(pending.last_message_at);
+ assert.ok(pending.created_at);assert.ok(pending.last_message_at);assert.equal(pending.message_template,'Mensagem de disponibilidade padrão');
  const revisit=await worker.fetch(new Request('https://curio.test/api/campanhas/return-open',{method:'POST',headers:{Origin:'https://curio.test','Content-Type':'application/x-www-form-urlencoded',Cookie:cookie},body:new URLSearchParams({id})}),env);
  assert.equal(revisit.status,303);assert.equal(revisit.headers.get('Location'),'https://wa.me/5591999991234');
  assert.equal(sqlite.prepare('SELECT stage FROM availability_leads WHERE id=?').get(id).stage,'pendentes');
@@ -52,6 +52,9 @@ test('availability requests validate, persist, retry safely and are private to a
  const created=await call('/api/campanhas/campaigns','POST',{name:'Disponibilidade',message:'Olá, {nome}!'},cookie);assert.equal(created.status,201);const template=(await created.json()).id;
  assert.equal((await call('/api/campanhas/campaigns/'+template,'PATCH',{name:'Retorno',message:'Olá, {nome}! Qual a melhor data?'},cookie)).status,200);
  assert.equal((await (await call('/api/campanhas/campaigns','GET',null,cookie)).json())[0].name,'Retorno');
+ assert.equal((await dispatch({id,campaign_id:template,message:'Olá, Maria!'})).status,303);
+ const withTemplate=await (await call('/api/campanhas/return-leads?status=pendentes','GET',null,cookie)).json();
+ assert.equal(withTemplate.rows[0].message_template,'Retorno');
  await call('/api/campanhas/logout','POST',{},cookie);
  assert.equal((await call('/retorno/','GET',null,returnCookie.split(';')[0])).status,303);
  assert.equal((await call('/api/campanhas/return-leads','GET',null,cookie)).status,401);

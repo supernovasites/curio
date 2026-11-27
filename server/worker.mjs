@@ -596,7 +596,7 @@ async function manageReturn(req,db,path,user,audit){
     const from=' FROM availability_leads'+(where.length?' WHERE '+where.join(' AND '):'');
     const total=(await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first()).total;
     const pages=Math.max(1,Math.ceil(total/10)),page=Math.min(pages,Math.max(1,parseInt(url.searchParams.get('page'))||1));
-    const rows=await db.prepare("SELECT id,name,phone,city,status,stage,notes,created_at,contacted_at,(SELECT MAX(a.created_at) FROM audit a WHERE a.entity_id=availability_leads.id AND a.action IN ('abriu_whatsapp_retorno','consultou_whatsapp_retorno')) AS last_message_at"+from+' ORDER BY created_at DESC,id LIMIT 10 OFFSET ?').bind(...args,(page-1)*10).all();
+    const rows=await db.prepare("SELECT id,name,phone,city,status,stage,notes,created_at,contacted_at,(SELECT MAX(a.created_at) FROM audit a WHERE a.entity_id=availability_leads.id AND a.action IN ('abriu_whatsapp_retorno','consultou_whatsapp_retorno')) AS last_message_at,(SELECT substr(a.action,length('mensagem_retorno:')+1) FROM audit a WHERE a.entity_id=availability_leads.id AND a.action LIKE 'mensagem_retorno:%' ORDER BY a.id DESC LIMIT 1) AS message_template"+from+' ORDER BY created_at DESC,id LIMIT 10 OFFSET ?').bind(...args,(page-1)*10).all();
     const summaryRows=await db.prepare('SELECT stage,COUNT(*) total FROM availability_leads'+(q?' WHERE (name LIKE ? OR city LIKE ?)':'')+' GROUP BY stage').bind(...(q?['%'+q+'%','%'+q+'%']:[])).all();
     const summary={principal:0,pendentes:0,interessados:0,sem_interesse:0,sem_resposta:0,reservas:0};
     for(const row of summaryRows.results)summary[row.stage]=Number(row.total||0);
@@ -618,6 +618,9 @@ async function manageReturn(req,db,path,user,audit){
     if(!lead)fail(404,'Pedido não encontrado.');
     if(lead.stage!=='principal'&&lead.stage!=='pendentes')fail(409,'Este contato já foi classificado.');
     await db.prepare("UPDATE availability_leads SET status='contatado',stage='pendentes',contacted_at=CURRENT_TIMESTAMP,contacted_by=? WHERE id=?").bind(user.id,id).run();
+    const campaignId=clean(f.get('campaign_id'),80);
+    const campaign=campaignId?await db.prepare('SELECT name FROM campaigns WHERE id=?').bind(campaignId).first():null;
+    await audit(user.id,'mensagem_retorno:'+(campaign?.name||'Mensagem de disponibilidade padrão'),id);
     await audit(user.id,'abriu_whatsapp_retorno',id);
     return new Response(null,{status:303,headers:{Location:'https://wa.me/'+lead.phone+'?text='+encodeURIComponent(message.trim().replace(/\{nome\}/gi,()=>lead.name.trim().split(/\s+/)[0])),'Cache-Control':'no-store'}});
   }
