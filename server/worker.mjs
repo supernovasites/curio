@@ -596,7 +596,7 @@ async function manageReturn(req,db,path,user,audit){
     const from=' FROM availability_leads'+(where.length?' WHERE '+where.join(' AND '):'');
     const total=(await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first()).total;
     const pages=Math.max(1,Math.ceil(total/10)),page=Math.min(pages,Math.max(1,parseInt(url.searchParams.get('page'))||1));
-    const rows=await db.prepare('SELECT id,name,city,status,stage,notes,created_at,contacted_at'+from+' ORDER BY created_at DESC,id LIMIT 10 OFFSET ?').bind(...args,(page-1)*10).all();
+    const rows=await db.prepare('SELECT id,name,phone,city,status,stage,notes,created_at,contacted_at'+from+' ORDER BY created_at DESC,id LIMIT 10 OFFSET ?').bind(...args,(page-1)*10).all();
     const summaryRows=await db.prepare('SELECT stage,COUNT(*) total FROM availability_leads'+(q?' WHERE (name LIKE ? OR city LIKE ?)':'')+' GROUP BY stage').bind(...(q?['%'+q+'%','%'+q+'%']:[])).all();
     const summary={principal:0,pendentes:0,interessados:0,sem_interesse:0,sem_resposta:0,reservas:0};
     for(const row of summaryRows.results)summary[row.stage]=Number(row.total||0);
