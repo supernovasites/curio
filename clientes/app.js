@@ -1,5 +1,5 @@
 import {renderHeader} from '/campanhas/nav.js';
-import {guestForm} from '/cadastro/form.js?v=20261127-compact-stay-v2';
+import {guestForm} from '/cadastro/form.js?v=20261127-stay-navigation';
 const $=selector=>document.querySelector(selector);
 let approvalPage=1,customerPage=1,customerQuery='',approvalsVersion=0,customersVersion=0;
 function message(text,error=false){$('#status').textContent=text;$('#status').classList.toggle('error',error);}
