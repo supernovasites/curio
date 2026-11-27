@@ -586,18 +586,20 @@ async function availabilityRequest(req,env){
 }
 
 async function manageReturn(req,db,path,user,audit){
+  const stages=['principal','pendentes','interessados','sem_interesse','sem_resposta','reservas'];
   if(path==='/return-leads'&&req.method==='GET'){
-    const url=new URL(req.url),status=url.searchParams.get('status')||'novo',q=clean(url.searchParams.get('q'),100);
-    if(!['novo','contatado','todos'].includes(status))fail(400,'Filtro inválido.');
+    const url=new URL(req.url),stage=url.searchParams.get('status')||'principal',q=clean(url.searchParams.get('q'),100);
+    if(![...stages,'todos'].includes(stage))fail(400,'Filtro inválido.');
     const where=[],args=[];
-    if(status!=='todos'){where.push('status=?');args.push(status);}
+    if(stage!=='todos'){where.push('stage=?');args.push(stage);}
     if(q){where.push('(name LIKE ? OR city LIKE ?)');args.push('%'+q+'%','%'+q+'%');}
     const from=' FROM availability_leads'+(where.length?' WHERE '+where.join(' AND '):'');
     const total=(await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first()).total;
     const pages=Math.max(1,Math.ceil(total/10)),page=Math.min(pages,Math.max(1,parseInt(url.searchParams.get('page'))||1));
-    const rows=await db.prepare('SELECT id,name,city,status,created_at,contacted_at'+from+' ORDER BY created_at DESC,id LIMIT 10 OFFSET ?').bind(...args,(page-1)*10).all();
-    const summaryRows=await db.prepare('SELECT status,COUNT(*) total FROM availability_leads'+(q?' WHERE (name LIKE ? OR city LIKE ?)':'')+' GROUP BY status').bind(...(q?['%'+q+'%','%'+q+'%']:[])).all();
-    const summary={novo:0,contatado:0};for(const row of summaryRows.results)summary[row.status]=Number(row.total||0);summary.todos=summary.novo+summary.contatado;
+    const rows=await db.prepare('SELECT id,name,city,status,stage,notes,created_at,contacted_at'+from+' ORDER BY created_at DESC,id LIMIT 10 OFFSET ?').bind(...args,(page-1)*10).all();
+    const summaryRows=await db.prepare('SELECT stage,COUNT(*) total FROM availability_leads'+(q?' WHERE (name LIKE ? OR city LIKE ?)':'')+' GROUP BY stage').bind(...(q?['%'+q+'%','%'+q+'%']:[])).all();
+    const summary={principal:0,pendentes:0,interessados:0,sem_interesse:0,sem_resposta:0,reservas:0};
+    for(const row of summaryRows.results)summary[row.stage]=Number(row.total||0);
     return json({rows:rows.results,total,page,pages,summary});
   }
   if(path==='/return-dispatch'&&req.method==='POST'){
@@ -605,11 +607,23 @@ async function manageReturn(req,db,path,user,audit){
     const raw=await req.text();if(raw.length>50000)fail(413,'Mensagem muito grande.');
     const f=new URLSearchParams(raw),id=clean(f.get('id'),80),message=f.get('message')||'';
     if(!message.trim()||message.length>4000)fail(400,'Informe uma mensagem de até 4.000 caracteres.');
-    const lead=await db.prepare('SELECT id,name,phone FROM availability_leads WHERE id=?').bind(id).first();
+    const lead=await db.prepare('SELECT id,name,phone,stage FROM availability_leads WHERE id=?').bind(id).first();
     if(!lead)fail(404,'Pedido não encontrado.');
-    await db.prepare("UPDATE availability_leads SET status='contatado',contacted_at=CURRENT_TIMESTAMP,contacted_by=? WHERE id=?").bind(user.id,id).run();
+    if(lead.stage!=='principal'&&lead.stage!=='pendentes')fail(409,'Este contato já foi classificado.');
+    await db.prepare("UPDATE availability_leads SET status='contatado',stage='pendentes',contacted_at=CURRENT_TIMESTAMP,contacted_by=? WHERE id=?").bind(user.id,id).run();
     await audit(user.id,'abriu_whatsapp_retorno',id);
     return new Response(null,{status:303,headers:{Location:'https://wa.me/'+lead.phone+'?text='+encodeURIComponent(message.trim().replaceAll('{nome}',lead.name.split(/\s+/)[0])),'Cache-Control':'no-store'}});
+  }
+  if(path==='/return-outcome'&&req.method==='POST'){
+    const b=await body(req),id=clean(b.id,80);
+    if(!['interessados','sem_interesse','sem_resposta','reservas'].includes(b.stage))fail(400,'Selecione uma classificação.');
+    const lead=await db.prepare('SELECT id,stage FROM availability_leads WHERE id=?').bind(id).first();
+    if(!lead)fail(404,'Contato não encontrado.');
+    if(lead.stage!=='pendentes'&&!(b.stage==='reservas'&&lead.stage==='interessados'))fail(409,'Este contato não está na etapa correta para essa classificação.');
+    const result=await db.prepare('UPDATE availability_leads SET stage=?,notes=? WHERE id=? AND stage=?').bind(b.stage,clean(b.notes,2000),id,lead.stage).run();
+    if(Number(result.meta?.changes??result.changes)!==1)fail(409,'A classificação foi atualizada por outra pessoa.');
+    await audit(user.id,b.stage==='reservas'?'marcou_reserva_retorno':'classificou_retorno',id);
+    return json({ok:true});
   }
   fail(404,'Recurso não encontrado.');
 }
