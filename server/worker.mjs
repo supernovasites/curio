@@ -587,17 +587,22 @@ async function availabilityRequest(req,env){
 
 async function manageReturn(req,db,path,user,audit){
   if(path==='/return-leads'&&req.method==='GET'){
-    const url=new URL(req.url),status=url.searchParams.get('status')||'novo',q=clean(url.searchParams.get('q'),100);
-    if(!['novo','contatado','todos'].includes(status))fail(400,'Filtro inválido.');
+    const url=new URL(req.url),status=url.searchParams.get('status')||'pendente',q=clean(url.searchParams.get('q'),100);
+    const allowed=['pendente','interessados','sem_interesse','sem_resposta','reservas','todos','novo','contatado'];
+    if(!allowed.includes(status))fail(400,'Filtro inválido.');
     const where=[],args=[];
-    if(status!=='todos'){where.push('status=?');args.push(status);}
+    if(status==='pendente')where.push('outcome IS NULL');
+    else if(status==='interessados')where.push("outcome='interessado'");
+    else if(status==='reservas')where.push("outcome='reserva_realizada'");
+    else if(status==='novo'||status==='contatado'){where.push('status=?');args.push(status);}
+    else if(status!=='todos'){where.push('outcome=?');args.push(status);}
     if(q){where.push('(name LIKE ? OR city LIKE ?)');args.push('%'+q+'%','%'+q+'%');}
-    const from=' FROM availability_leads'+(where.length?' WHERE '+where.join(' AND '):'');
-    const total=(await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first()).total;
+    const base=' FROM availability_leads',filtered=base+(where.length?' WHERE '+where.join(' AND '):'');
+    const total=(await db.prepare('SELECT COUNT(*) total'+filtered).bind(...args).first()).total;
     const pages=Math.max(1,Math.ceil(total/10)),page=Math.min(pages,Math.max(1,parseInt(url.searchParams.get('page'))||1));
-    const rows=await db.prepare('SELECT id,name,city,status,created_at,contacted_at'+from+' ORDER BY created_at DESC,id LIMIT 10 OFFSET ?').bind(...args,(page-1)*10).all();
-    const summaryRows=await db.prepare('SELECT status,COUNT(*) total FROM availability_leads'+(q?' WHERE (name LIKE ? OR city LIKE ?)':'')+' GROUP BY status').bind(...(q?['%'+q+'%','%'+q+'%']:[])).all();
-    const summary={novo:0,contatado:0};for(const row of summaryRows.results)summary[row.status]=Number(row.total||0);summary.todos=summary.novo+summary.contatado;
+    const rows=await db.prepare('SELECT id,name,city,status,created_at,contacted_at,outcome,outcome_notes'+filtered+' ORDER BY created_at DESC,id LIMIT 10 OFFSET ?').bind(...args,(page-1)*10).all();
+    const summaryRows=await db.prepare('SELECT outcome,COUNT(*) total'+base+(q?' WHERE (name LIKE ? OR city LIKE ?)':'')+' GROUP BY outcome').bind(...(q?['%'+q+'%','%'+q+'%']:[])).all();
+    const summary={pendente:0,interessado:0,sem_interesse:0,sem_resposta:0,reserva_realizada:0};for(const row of summaryRows.results){const key=row.outcome||'pendente';summary[key]=Number(row.total||0);}summary.todos=Object.values(summary).reduce((sum,value)=>sum+value,0);
     return json({rows:rows.results,total,page,pages,summary});
   }
   if(path==='/return-dispatch'&&req.method==='POST'){
@@ -605,11 +610,24 @@ async function manageReturn(req,db,path,user,audit){
     const raw=await req.text();if(raw.length>50000)fail(413,'Mensagem muito grande.');
     const f=new URLSearchParams(raw),id=clean(f.get('id'),80),message=f.get('message')||'';
     if(!message.trim()||message.length>4000)fail(400,'Informe uma mensagem de até 4.000 caracteres.');
-    const lead=await db.prepare('SELECT id,name,phone FROM availability_leads WHERE id=?').bind(id).first();
-    if(!lead)fail(404,'Pedido não encontrado.');
-    await db.prepare("UPDATE availability_leads SET status='contatado',contacted_at=CURRENT_TIMESTAMP,contacted_by=? WHERE id=?").bind(user.id,id).run();
+    const lead=await db.prepare("SELECT id,name,phone FROM availability_leads WHERE id=? AND outcome IS NULL AND status='novo'").bind(id).first();
+    if(!lead)fail(404,'Pedido não encontrado ou já enviado.');
+    const updated=await db.prepare("UPDATE availability_leads SET status='contatado',contacted_at=CURRENT_TIMESTAMP,contacted_by=? WHERE id=? AND outcome IS NULL AND status='novo'").bind(user.id,id).run();
+    if(!Number(updated.meta?.changes??updated.changes))fail(409,'Este pedido já foi enviado. Atualize a lista.');
     await audit(user.id,'abriu_whatsapp_retorno',id);
     return new Response(null,{status:303,headers:{Location:'https://wa.me/'+lead.phone+'?text='+encodeURIComponent(message.trim().replaceAll('{nome}',lead.name.split(/\s+/)[0])),'Cache-Control':'no-store'}});
+  }
+  if(path==='/return-outcome'&&req.method==='POST'){
+    const input=await body(req),id=clean(input.id,80),status=clean(input.status,40),notes=clean(input.notes,2000);
+    if(!['interessado','sem_interesse','sem_resposta','reserva_realizada'].includes(status))fail(400,'Classificação inválida.');
+    if(status==='reserva_realizada'){
+      const result=await db.prepare("UPDATE availability_leads SET outcome='reserva_realizada',outcome_notes=?,outcome_at=CURRENT_TIMESTAMP,outcome_by=? WHERE id=? AND outcome='interessado'").bind(notes,user.id,id).run();
+      if(!Number(result.meta?.changes??result.changes))fail(409,'Registre o retorno como Demonstrou interesse antes de confirmar a reserva.');
+      await audit(user.id,'reserva_realizada_retorno',id);return json({ok:true});
+    }
+    const result=await db.prepare("UPDATE availability_leads SET outcome=?,outcome_notes=?,outcome_at=CURRENT_TIMESTAMP,outcome_by=? WHERE id=? AND status='contatado' AND outcome IS NULL").bind(status,notes,user.id,id).run();
+    if(!Number(result.meta?.changes??result.changes))fail(409,'Envie a mensagem e atualize a lista antes de classificar o retorno.');
+    await audit(user.id,'classificou_retorno_'+status,id);return json({ok:true});
   }
   fail(404,'Recurso não encontrado.');
 }
@@ -653,7 +671,7 @@ async function api(req, env, path) {
     headers.append('Set-Cookie',returnCookie(token,age));
     const response=json(profile);for(const cookie of headers.getSetCookie())response.headers.append('Set-Cookie',cookie);return response;
   }
-  if(path==='/return-leads'||path==='/return-dispatch')return manageReturn(req,db,path,user,audit);
+  if(path==='/return-leads'||path==='/return-dispatch'||path==='/return-outcome')return manageReturn(req,db,path,user,audit);
   if(path==='/guest-registrations'||path.startsWith('/guest-registrations/')||path.startsWith('/guest-profiles/'))return manageGuests(req,db,path,user,audit);
   if(path==='/rooms' || path.startsWith('/rooms/') || path==='/customers' || path.startsWith('/customers/') || path==='/reservations' || path.startsWith('/reservations/'))
     return manageReservations(req,db,path,user,audit);
