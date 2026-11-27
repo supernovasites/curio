@@ -26,6 +26,7 @@ test('availability requests validate, persist, retry safely and are private to a
  assert.equal(sqlite.prepare('SELECT COUNT(*) total FROM availability_leads').get().total,1);
  assert.equal((await call('/api/disponibilidade','POST',{...payload,city:'Outra'})).status,409);
  assert.equal((await call('/api/campanhas/return-leads')).status,401);
+ assert.equal((await call('/api/campanhas/return-count')).status,401);
  const guarded=await call('/retorno/');assert.equal(guarded.status,303);assert.match(guarded.headers.get('Location'),/continuar=retorno/);
  assert.equal((await call('/retorno/app.js')).status,303);
  const login=await call('/api/campanhas/login','POST',{username:'equipe',password:'test-password'}),cookie=login.headers.get('Set-Cookie').split(';')[0];
@@ -33,6 +34,7 @@ test('availability requests validate, persist, retry safely and are private to a
  assert.match(returnCookie,/Path=\/retorno; HttpOnly; Secure; SameSite=Strict/);
  assert.equal((await call('/retorno/','GET',null,returnCookie.split(';')[0])).status,200);
  const list=await (await call('/api/campanhas/return-leads','GET',null,cookie)).json();assert.equal(list.total,1);assert.equal(list.rows[0].city,'Belém');assert.equal(list.rows[0].status,'novo');assert.equal(list.rows[0].phone,'5591999991234');assert.ok(!('stay_date' in list.rows[0]));
+ assert.deepEqual(await (await call('/api/campanhas/return-count','GET',null,cookie)).json(),{total:1});
  const id=list.rows[0].id;
  const dispatch=(input,session=cookie,origin='https://curio.test')=>worker.fetch(new Request('https://curio.test/api/campanhas/return-dispatch',{method:'POST',headers:{Origin:origin,'Content-Type':'application/x-www-form-urlencoded',Cookie:session},body:new URLSearchParams(input)}),env);
  assert.equal((await dispatch({id,message:'Olá'},'',undefined)).status,401);
@@ -42,6 +44,7 @@ test('availability requests validate, persist, retry safely and are private to a
  const whatsapp=new URL(opened.headers.get('Location'));assert.equal(whatsapp.pathname,'/5591999991234');assert.equal(whatsapp.searchParams.get('text'),'Olá, Maria! Vamos consultar?');
  assert.equal((await (await call('/api/campanhas/return-leads','GET',null,cookie)).json()).total,0);
  assert.equal((await (await call('/api/campanhas/return-leads?status=pendentes','GET',null,cookie)).json()).total,1);
+ assert.deepEqual(await (await call('/api/campanhas/return-count','GET',null,cookie)).json(),{total:0});
  const pending=(await (await call('/api/campanhas/return-leads?status=pendentes','GET',null,cookie)).json()).rows[0];
  assert.ok(pending.created_at);assert.ok(pending.last_message_at);assert.equal(pending.message_template,'Mensagem de disponibilidade padrão');
  const revisit=await worker.fetch(new Request('https://curio.test/api/campanhas/return-open',{method:'POST',headers:{Origin:'https://curio.test','Content-Type':'application/x-www-form-urlencoded',Cookie:cookie},body:new URLSearchParams({id})}),env);

@@ -1,4 +1,4 @@
-import {renderHeader} from '/campanhas/nav.js?v=20261127-reservation-map';
+import {renderHeader} from '/campanhas/nav.js?v=20261127-notification';
 const $=selector=>document.querySelector(selector);
 const escape=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const addDays=(day,count)=>new Date(Date.parse(day+'T12:00:00Z')+count*86400000).toISOString().slice(0,10);

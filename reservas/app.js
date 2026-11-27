@@ -1,4 +1,4 @@
-import {renderHeader} from '/campanhas/nav.js?v=20261127-reservation-map';
+import {renderHeader} from '/campanhas/nav.js?v=20261127-notification';
 import {$, api, weekendEnd, weekendLabel, reservationLabel, statuses, message, onSubmit, customerFields, options, list, monthlyCalendar, today, roomPicker, quoteLine} from '/reservar/common.js';
 
 const staff = (path,method,data) => api('/api/campanhas',path,method,data);

@@ -586,6 +586,10 @@ async function availabilityRequest(req,env){
 }
 
 async function manageReturn(req,db,path,user,audit){
+  if(path==='/return-count'&&req.method==='GET'){
+    const result=await db.prepare("SELECT COUNT(*) total FROM availability_leads WHERE stage='principal'").first();
+    return json({total:Number(result.total||0)});
+  }
   const stages=['principal','pendentes','interessados','sem_interesse','sem_resposta','reservas'];
   if(path==='/return-leads'&&req.method==='GET'){
     const url=new URL(req.url),stage=url.searchParams.get('status')||'principal',q=clean(url.searchParams.get('q'),100);
@@ -677,7 +681,7 @@ async function api(req, env, path) {
     headers.append('Set-Cookie',returnCookie(token,age));
     const response=json(profile);for(const cookie of headers.getSetCookie())response.headers.append('Set-Cookie',cookie);return response;
   }
-  if(path==='/return-leads'||path==='/return-open'||path==='/return-dispatch'||path==='/return-outcome')return manageReturn(req,db,path,user,audit);
+  if(path==='/return-count'||path==='/return-leads'||path==='/return-open'||path==='/return-dispatch'||path==='/return-outcome')return manageReturn(req,db,path,user,audit);
   if(path==='/guest-registrations'||path.startsWith('/guest-registrations/')||path.startsWith('/guest-profiles/'))return manageGuests(req,db,path,user,audit);
   if(path==='/rooms' || path.startsWith('/rooms/') || path==='/customers' || path.startsWith('/customers/') || path==='/reservations' || path.startsWith('/reservations/'))
     return manageReservations(req,db,path,user,audit);

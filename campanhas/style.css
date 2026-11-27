@@ -25,3 +25,5 @@
 #dashboard[aria-label="Desempenho da homepage"]{grid-template-columns:repeat(3,minmax(0,1fr))}
 
 .send-actions{display:flex;gap:8px}.send-actions>*{flex:1;min-width:0;min-height:44px;padding:9px 8px;font-size:13px}.send-actions .primary{width:auto}
+
+.return-notification{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;margin-left:5px;border-radius:9px;background:var(--green);color:var(--cream);font:700 10px/1 Arial,sans-serif;vertical-align:top}
