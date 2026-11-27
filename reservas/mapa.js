@@ -13,7 +13,7 @@ function detail(row,trigger){dialogTrigger=trigger;const room=snapshot.rooms.fin
 $('#close-map-dialog').onclick=()=>dialog.close();dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});dialog.addEventListener('close',()=>dialogTrigger?.focus({preventScroll:true}));
 function render(){
  const data=snapshot,start=month+'-01',days=[],date=new Date(start+'T12:00:00Z');
- while(date.toISOString().startsWith(month)){days.push(date.toISOString().slice(0,10));date.setUTCDate(date.getUTCDate()+1);}
+ while(date.toISOString().startsWith(month)){if(![2,3,4].includes(date.getUTCDay()))days.push(date.toISOString().slice(0,10));date.setUTCDate(date.getUTCDate()+1);}
  const opened=new Map(data.dates.map(row=>[row.day,Boolean(row.open)]));
  const rooms=[...data.rooms];if(data.reservations.some(row=>!row.room_id))rooms.push({id:null,name:'Sem quarto definido',stock:0});
  const dayName=new Intl.DateTimeFormat('pt-BR',{weekday:'short',timeZone:'UTC'});
