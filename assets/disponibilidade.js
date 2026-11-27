@@ -1,7 +1,5 @@
 const toggle=document.getElementById('availability-toggle');
 const form=document.getElementById('availability-form');
-const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-form.elements.stay_date.min=day;
 let requestKey=crypto.randomUUID();
 toggle.addEventListener('click',()=>{
  const open=form.hidden;
