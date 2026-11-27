@@ -12,7 +12,7 @@ Antes da publicação, aplique somente `migrations/0012_guest_registrations.sql`
 
 ## Pedidos de disponibilidade e retorno
 
-O botão de WhatsApp na homepage abre os campos Nome, WhatsApp, Cidade e Data de intenção para hospedagem. O envio salva o pedido antes de abrir a conversa com a anfitriã, com os dados preenchidos. O cliente confirma o envio no WhatsApp. Há validação de telefone e data, limite de pedidos e uma chave de repetição que evita duplicar o mesmo envio após falha de conexão.
+O botão de WhatsApp na homepage abre os campos Nome, WhatsApp e Cidade. O envio salva o pedido antes de abrir a conversa com a anfitriã, com os dados preenchidos. O cliente confirma o envio no WhatsApp. Há validação de telefone, limite de pedidos e uma chave de repetição que evita duplicar o mesmo envio após falha de conexão.
 
 `/retorno/` exige uma sessão válida da equipe, incluindo para servir seus arquivos. Administradores e operadores acessam a aba Retorno no menu interno. A lista tem busca por nome/cidade, paginação e filtros Novos pedidos, WhatsApp aberto e Todos os clientes. Ao expandir um cliente, a equipe revisa a mensagem e abre o contato no WhatsApp. O registro indica a abertura, sem afirmar que a mensagem foi enviada. Telefones ficam no servidor, como em Campanhas.
 

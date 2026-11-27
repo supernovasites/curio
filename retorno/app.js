@@ -1,7 +1,6 @@
 import {renderHeader} from '/campanhas/nav.js';
 const $=selector=>document.querySelector(selector);
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const displayDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(value||'')?value.split('-').reverse().join('/'):'Não informada';
 let messages=[],selected='',status='novo',page=1,pages=1,sequence=0,rows=[];
 const drafts=new Map();
 function notify(text){$('#notice').textContent=text;$('#notice').hidden=false;}
@@ -12,9 +11,9 @@ async function api(path,options={}){
 }
 const send=(path,data,method='POST')=>api(path,{method,body:JSON.stringify(data)});
 const protect=fn=>async event=>{try{await fn(event);}catch(error){notify(error.message);}};
-function messageFor(row){return drafts.get(selected+':'+row.id)??(messages.find(m=>m.id===selected)?.message||'Olá, {nome}! Recebemos seu pedido de disponibilidade para '+displayDate(row.stay_date)+'. Vamos conversar sobre sua hospedagem?').replaceAll('{nome}',row.name.split(/\s+/)[0]);}
+function messageFor(row){return drafts.get(selected+':'+row.id)??(messages.find(m=>m.id===selected)?.message||'Olá, {nome}! Recebemos seu pedido de disponibilidade. Vamos conversar sobre sua hospedagem?').replaceAll('{nome}',row.name.split(/\s+/)[0]);}
 function renderRows(){
- $('#contact-list').innerHTML=rows.length?rows.map(row=>`<article class="guest"><button class="guest-name" aria-expanded="false" aria-controls="lead-${escape(row.id)}"><span class="guest-identity"><strong>${escape(row.name)}</strong><span class="return-meta"><span>Cidade: ${escape(row.city)}</span><span>Intenção de hospedagem: ${displayDate(row.stay_date)}</span></span><span class="return-state">${row.status==='novo'?'Novo pedido':'WhatsApp aberto'}</span></span></button><div class="guest-details" id="lead-${escape(row.id)}" hidden><form class="return-send" method="POST" action="/api/campanhas/return-dispatch" target="_blank" rel="noopener"><input type="hidden" name="id" value="${escape(row.id)}"><label>Mensagem para este cliente<textarea name="message" class="return-message" rows="5" maxlength="4000" required data-draft="${escape(selected+':'+row.id)}">${escape(messageFor(row))}</textarea></label><button type="submit" class="primary">Enviar mensagem pelo WhatsApp</button></form></div></article>`).join(''):'<p class="empty">Nenhum pedido nesta lista.</p>';
+ $('#contact-list').innerHTML=rows.length?rows.map(row=>`<article class="guest"><button class="guest-name" aria-expanded="false" aria-controls="lead-${escape(row.id)}"><span class="guest-identity"><strong>${escape(row.name)}</strong><span class="return-meta"><span>Cidade: ${escape(row.city)}</span></span><span class="return-state">${row.status==='novo'?'Novo pedido':'WhatsApp aberto'}</span></span></button><div class="guest-details" id="lead-${escape(row.id)}" hidden><form class="return-send" method="POST" action="/api/campanhas/return-dispatch" target="_blank" rel="noopener"><input type="hidden" name="id" value="${escape(row.id)}"><label>Mensagem para este cliente<textarea name="message" class="return-message" rows="5" maxlength="4000" required data-draft="${escape(selected+':'+row.id)}">${escape(messageFor(row))}</textarea></label><button type="submit" class="primary">Enviar mensagem pelo WhatsApp</button></form></div></article>`).join(''):'<p class="empty">Nenhum pedido nesta lista.</p>';
 }
 async function contacts(){
  const current=++sequence;const data=await api('/return-leads?'+new URLSearchParams({status,page,q:$('#search').value}));if(current!==sequence)return;

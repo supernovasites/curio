@@ -1,5 +1,4 @@
 import {maskPhone} from './phone-mask.js';
-import {bindDateInput,dateToIso} from './date-mask.js';
 const toggle=document.getElementById('availability-toggle');
 const form=document.getElementById('availability-form');
 const phone=form.elements.phone;
@@ -11,8 +10,6 @@ phone.addEventListener('input',()=>{
  if(position<raw.length){let caret=0,seen=0;while(caret<phone.value.length&&seen<count){if(/\d/.test(phone.value[caret]))seen++;caret++;}phone.setSelectionRange(caret,caret);}
 });
 phone.addEventListener('blur',()=>{phone.value=maskPhone(phone.value);});
-const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-bindDateInput(form.elements.stay_date);
 let requestKey=crypto.randomUUID();
 toggle.addEventListener('click',()=>{
  const open=form.hidden;
@@ -22,8 +19,7 @@ toggle.addEventListener('click',()=>{
 form.addEventListener('input',()=>{requestKey=crypto.randomUUID();});
 form.addEventListener('submit',async event=>{
  event.preventDefault();const button=event.submitter,status=document.getElementById('availability-status');
- const dataToSend={...Object.fromEntries(new FormData(form)),request_key:requestKey};dataToSend.stay_date=dateToIso(dataToSend.stay_date);
- if(!dataToSend.stay_date||dataToSend.stay_date<day){form.elements.stay_date.setCustomValidity('Digite uma data de hospedagem válida a partir de hoje, no formato DD/MM/AAAA.');form.elements.stay_date.reportValidity();return;}
+ const dataToSend={...Object.fromEntries(new FormData(form)),request_key:requestKey};
  button.disabled=true;status.textContent='Salvando seu pedido…';
  try{
   const response=await fetch('/api/disponibilidade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dataToSend)});

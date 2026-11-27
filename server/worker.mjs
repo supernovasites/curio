@@ -554,17 +554,17 @@ async function availabilityRequest(req,env){
   if(req.method!=='POST')fail(405,'Método não permitido.');
   if(!sameOriginRequest(req))fail(403,'Origem inválida.');
   if(!env.DB)fail(503,'Não foi possível salvar agora. Tente novamente em instantes.');
-  const b=await body(req),name=clean(b.name,120),city=clean(b.city,100),phone=normalizePhone(clean(b.phone,40)),stayDate=dateOnly(b.stay_date),key=clean(b.request_key,50);
-  if(!name||!city||!phone||!stayDate||stayDate!==b.stay_date||stayDate<localDay()||!/^[a-f0-9-]{36}$/i.test(key))fail(400,'Preencha nome, WhatsApp válido, cidade e uma data de hospedagem a partir de hoje.');
+  const b=await body(req),name=clean(b.name,120),city=clean(b.city,100),phone=normalizePhone(clean(b.phone,40)),key=clean(b.request_key,50);
+  if(!name||!city||!phone||!/^[a-f0-9-]{36}$/i.test(key))fail(400,'Preencha nome, WhatsApp válido e cidade.');
   const db=env.DB;
   await customerLimit(db,await sha('availability-ip:'+(req.headers.get('CF-Connecting-IP')||'local')),15);
-  const previous=await db.prepare('SELECT name,phone,city,stay_date FROM availability_leads WHERE request_key=?').bind(key).first();
-  if(previous&&(previous.name!==name||previous.phone!==phone||previous.city!==city||previous.stay_date!==stayDate))fail(409,'Atualize o formulário para enviar outro pedido.');
+  const previous=await db.prepare('SELECT name,phone,city FROM availability_leads WHERE request_key=?').bind(key).first();
+  if(previous&&(previous.name!==name||previous.phone!==phone||previous.city!==city))fail(409,'Atualize o formulário para enviar outro pedido.');
   if(!previous){
     await customerLimit(db,await sha('availability-phone:'+phone),5);
-    await db.prepare('INSERT INTO availability_leads(id,request_key,name,phone,city,stay_date) VALUES(?,?,?,?,?,?) ON CONFLICT(request_key) DO NOTHING').bind(crypto.randomUUID(),key,name,phone,city,stayDate).run();
+    await db.prepare('INSERT INTO availability_leads(id,request_key,name,phone,city,stay_date) VALUES(?,?,?,?,?,?) ON CONFLICT(request_key) DO NOTHING').bind(crypto.randomUUID(),key,name,phone,city,'').run();
   }
-  const text=`Olá, Carla! Meu nome é ${name}, sou de ${city}. Quero saber a disponibilidade para hospedagem em ${stayDate.split('-').reverse().join('/')}. Meu WhatsApp é +${phone}.`;
+  const text=`Olá, Carla! Meu nome é ${name}, sou de ${city}. Quero receber a disponibilidade de hospedagem. Meu WhatsApp é +${phone}.`;
   return json({ok:true,whatsapp_url:'https://wa.me/5591991400045?text='+encodeURIComponent(text)},201);
 }
 
@@ -578,7 +578,7 @@ async function manageReturn(req,db,path,user,audit){
     const from=' FROM availability_leads'+(where.length?' WHERE '+where.join(' AND '):'');
     const total=(await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first()).total;
     const pages=Math.max(1,Math.ceil(total/10)),page=Math.min(pages,Math.max(1,parseInt(url.searchParams.get('page'))||1));
-    const rows=await db.prepare('SELECT id,name,city,stay_date,status,created_at,contacted_at'+from+' ORDER BY created_at DESC,id LIMIT 10 OFFSET ?').bind(...args,(page-1)*10).all();
+    const rows=await db.prepare('SELECT id,name,city,status,created_at,contacted_at'+from+' ORDER BY created_at DESC,id LIMIT 10 OFFSET ?').bind(...args,(page-1)*10).all();
     return json({rows:rows.results,total,page,pages});
   }
   if(path==='/return-dispatch'&&req.method==='POST'){

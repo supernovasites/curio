@@ -13,12 +13,12 @@ test('availability requests validate, persist, retry safely and are private to a
  sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)').run('operator','equipe','Equipe',await hashPassword('test-password'),'operador');
  const env={DB:adapter(sqlite),ASSETS:{fetch:async req=>new Response(new URL(req.url).pathname)}};
  const call=(path,method='GET',data,cookie,origin='https://curio.test')=>worker.fetch(new Request('https://curio.test'+path,{method,headers:{Origin:origin,'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{})},...(data?{body:JSON.stringify(data)}:{})}),env);
- const payload={request_key:crypto.randomUUID(),name:'Maria Teste',phone:'(91) 99999-1234',city:'Belém',stay_date:'2026-12-20'};
+ const payload={request_key:crypto.randomUUID(),name:'Maria Teste',phone:'(91) 99999-1234',city:'Belém'};
  assert.equal((await call('/api/disponibilidade','GET')).status,405);
  assert.equal((await call('/api/disponibilidade','POST',payload,null,'https://evil.test')).status,403);
- for(const fields of [{name:''},{phone:'123'},{city:''},{stay_date:'2026-02-30'},{stay_date:'2026-11-26'},{request_key:'bad'}])assert.equal((await call('/api/disponibilidade','POST',{...payload,...fields})).status,400);
+ for(const fields of [{name:''},{phone:'123'},{city:''},{request_key:'bad'}])assert.equal((await call('/api/disponibilidade','POST',{...payload,...fields})).status,400);
  const saved=await call('/api/disponibilidade','POST',payload);assert.equal(saved.status,201);
- const target=new URL((await saved.json()).whatsapp_url);assert.equal(target.origin,'https://wa.me');assert.equal(target.pathname,'/5591991400045');assert.match(target.searchParams.get('text'),/20\/12\/2026/);
+ const target=new URL((await saved.json()).whatsapp_url);assert.equal(target.origin,'https://wa.me');assert.equal(target.pathname,'/5591991400045');assert.match(target.searchParams.get('text'),/Quero receber a disponibilidade de hospedagem/);
  assert.equal((await call('/api/disponibilidade','POST',payload)).status,201);
  assert.equal(sqlite.prepare('SELECT COUNT(*) total FROM availability_leads').get().total,1);
  assert.equal((await call('/api/disponibilidade','POST',{...payload,city:'Outra'})).status,409);
@@ -29,7 +29,7 @@ test('availability requests validate, persist, retry safely and are private to a
  const me=await call('/api/campanhas/me','GET',null,cookie),returnCookie=me.headers.getSetCookie().find(value=>value.startsWith('curio_return='));
  assert.match(returnCookie,/Path=\/retorno; HttpOnly; Secure; SameSite=Strict/);
  assert.equal((await call('/retorno/','GET',null,returnCookie.split(';')[0])).status,200);
- const list=await (await call('/api/campanhas/return-leads','GET',null,cookie)).json();assert.equal(list.total,1);assert.equal(list.rows[0].city,'Belém');assert.ok(!('phone' in list.rows[0]));
+ const list=await (await call('/api/campanhas/return-leads','GET',null,cookie)).json();assert.equal(list.total,1);assert.equal(list.rows[0].city,'Belém');assert.ok(!('phone' in list.rows[0]));assert.ok(!('stay_date' in list.rows[0]));
  const id=list.rows[0].id;
  const dispatch=(input,session=cookie,origin='https://curio.test')=>worker.fetch(new Request('https://curio.test/api/campanhas/return-dispatch',{method:'POST',headers:{Origin:origin,'Content-Type':'application/x-www-form-urlencoded',Cookie:session},body:new URLSearchParams(input)}),env);
  assert.equal((await dispatch({id,message:'Olá'},'',undefined)).status,401);
@@ -53,7 +53,7 @@ test('availability rate limit and return pagination',async t=>{
  const sqlite=new DatabaseSync(':memory:');t.after(()=>sqlite.close());for(const file of ['0001_campanhas','0011_availability_leads'])sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
  const env={DB:adapter(sqlite)};
  for(let i=0;i<6;i++){
-  const response=await worker.fetch(new Request('https://curio.test/api/disponibilidade',{method:'POST',headers:{Origin:'https://curio.test','Content-Type':'application/json'},body:JSON.stringify({request_key:crypto.randomUUID(),name:'Teste',phone:'91999991234',city:'Belém',stay_date:'2026-12-20'})}),env);
+  const response=await worker.fetch(new Request('https://curio.test/api/disponibilidade',{method:'POST',headers:{Origin:'https://curio.test','Content-Type':'application/json'},body:JSON.stringify({request_key:crypto.randomUUID(),name:'Teste',phone:'91999991234',city:'Belém'})}),env);
   assert.equal(response.status,i<5?201:429);
  }
  sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)').run('staff','staff','Equipe',await hashPassword('test-password'),'operador');
