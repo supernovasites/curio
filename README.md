@@ -1,5 +1,15 @@
 # Fazenda Curió — relacionamento
 
+## Pedidos de disponibilidade e retorno
+
+O botão de WhatsApp na homepage abre os campos Nome, WhatsApp, Cidade e Data de intenção para hospedagem. O envio salva o pedido antes de abrir a conversa com a anfitriã, com os dados preenchidos. O cliente confirma o envio no WhatsApp. Há validação de telefone e data, limite de pedidos e uma chave de repetição que evita duplicar o mesmo envio após falha de conexão.
+
+`/retorno/` exige uma sessão válida da equipe, incluindo para servir seus arquivos. Administradores e operadores acessam a aba Retorno no menu interno. A lista tem busca por nome/cidade, paginação e filtros Novos pedidos, WhatsApp aberto e Todos os clientes. Ao expandir um cliente, a equipe revisa a mensagem e abre o contato no WhatsApp. O registro indica a abertura, sem afirmar que a mensagem foi enviada. Telefones ficam no servidor, como em Campanhas.
+
+No fim de `/retorno/`, a seção recolhível Criar e editar mensagens prontas permite criar, salvar e editar textos com `{nome}`. Usa as mesmas mensagens de Campanhas. Os pedidos de disponibilidade são armazenados separadamente dos contatos importados.
+
+Antes de publicar, aplique **somente a nova migração** `migrations/0011_availability_leads.sql` no D1 existente. Ela cria a tabela de pedidos e seu índice sem modificar reservas ou contatos. Execute `node scripts/build.mjs` para incluir a página e os recursos públicos no pacote. Verificação do fluxo: `node --test tests/retorno.test.mjs`.
+
 Homepage existente e plataforma autenticada em `/campanhas`, executadas em Cloudflare Pages com D1. Build: `node scripts/build.mjs`; diretório publicado: `dist`. Node 22 ou superior. Sem dependências de produção.
 
 ## Funcionalidades

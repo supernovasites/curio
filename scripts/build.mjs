@@ -1,7 +1,7 @@
 import { mkdir,copyFile,writeFile } from 'node:fs/promises';
 await mkdir('dist/campanhas',{recursive:true});
 await mkdir('dist/painel',{recursive:true});
-for(const path of ['reservar','reservarquarto','clientes']) await mkdir('dist/'+path,{recursive:true});
+for(const path of ['reservar','reservarquarto','clientes','retorno']) await mkdir('dist/'+path,{recursive:true});
 await mkdir('dist/assets',{recursive:true});
 await mkdir('dist/assets/quartos',{recursive:true});
 for (const id of ['anexo-3','anexo-4','anexo-5','arvore','manga-rosa','sede-3','sede-4'])
@@ -20,6 +20,8 @@ await mkdir('dist/reservarquarto/quartos',{recursive:true});
 await copyFile('reservas/quartos.html','dist/reservarquarto/quartos/index.html');
 await copyFile('reservas/quartos.js','dist/reservarquarto/quartos/app.js');
 await copyFile('reservas/index.html','dist/clientes/index.html');
+for(const f of ['index.html','app.js','style.css'])await copyFile('retorno/'+f,'dist/retorno/'+f);
+for(const f of ['disponibilidade.js','disponibilidade.css'])await copyFile('assets/'+f,'dist/assets/'+f);
 await copyFile('metricas.js','dist/metricas.js');
 const {readFile}=await import('node:fs/promises');
 const csv=await readFile('campanhas/csv.js','utf8');
@@ -27,5 +29,5 @@ const worker=await readFile('server/worker.mjs','utf8');
 const age=await readFile('campanhas/age.js','utf8');
 const identity=await readFile('reserva/identity.js','utf8');
 await writeFile('dist/_worker.js',[csv,age,identity,worker.replace(/^import .*;\r?\n/gm,'')].map(source=>source.replaceAll('export function','function')).join('\n'));
-await writeFile('dist/_routes.json',JSON.stringify({version:1,include:['/api/*',...['campanhas','painel','usuarios','mensagens','reserva','reservas','reservar','gestaodereservaaa','reservarquarto','clientes'].flatMap(path=>['/'+path,'/'+path+'/*'])],exclude:[]}));
+await writeFile('dist/_routes.json',JSON.stringify({version:1,include:['/api/*',...['retorno','campanhas','painel','usuarios','mensagens','reserva','reservas','reservar','gestaodereservaaa','reservarquarto','clientes'].flatMap(path=>['/'+path,'/'+path+'/*'])],exclude:[]}));
 console.log('Build concluído em dist. Nenhum dado pessoal ou credencial incluído.');

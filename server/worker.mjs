@@ -435,6 +435,53 @@ async function staffForToken(db, tokenHash, now) {
 const reservationsCookie = (token, maxAge) =>
   'curio_booking_admin='+token+'; Path=/reservarquarto; HttpOnly; Secure; SameSite=Strict; Max-Age='+maxAge;
 
+const returnCookie=(token,maxAge)=>'curio_return='+token+'; Path=/retorno; HttpOnly; Secure; SameSite=Strict; Max-Age='+maxAge;
+
+async function availabilityRequest(req,env){
+  if(req.method!=='POST')fail(405,'Método não permitido.');
+  if(!sameOriginRequest(req))fail(403,'Origem inválida.');
+  if(!env.DB)fail(503,'Não foi possível salvar agora. Tente novamente em instantes.');
+  const b=await body(req),name=clean(b.name,120),city=clean(b.city,100),phone=normalizePhone(clean(b.phone,40)),stayDate=dateOnly(b.stay_date),key=clean(b.request_key,50);
+  if(!name||!city||!phone||!stayDate||stayDate!==b.stay_date||stayDate<localDay()||!/^[a-f0-9-]{36}$/i.test(key))fail(400,'Preencha nome, WhatsApp válido, cidade e uma data de hospedagem a partir de hoje.');
+  const db=env.DB;
+  await customerLimit(db,await sha('availability-ip:'+(req.headers.get('CF-Connecting-IP')||'local')),15);
+  const previous=await db.prepare('SELECT name,phone,city,stay_date FROM availability_leads WHERE request_key=?').bind(key).first();
+  if(previous&&(previous.name!==name||previous.phone!==phone||previous.city!==city||previous.stay_date!==stayDate))fail(409,'Atualize o formulário para enviar outro pedido.');
+  if(!previous){
+    await customerLimit(db,await sha('availability-phone:'+phone),5);
+    await db.prepare('INSERT INTO availability_leads(id,request_key,name,phone,city,stay_date) VALUES(?,?,?,?,?,?) ON CONFLICT(request_key) DO NOTHING').bind(crypto.randomUUID(),key,name,phone,city,stayDate).run();
+  }
+  const text=`Olá, Carla! Meu nome é ${name}, sou de ${city}. Quero saber a disponibilidade para hospedagem em ${stayDate.split('-').reverse().join('/')}. Meu WhatsApp é +${phone}.`;
+  return json({ok:true,whatsapp_url:'https://wa.me/5591991400045?text='+encodeURIComponent(text)},201);
+}
+
+async function manageReturn(req,db,path,user,audit){
+  if(path==='/return-leads'&&req.method==='GET'){
+    const url=new URL(req.url),status=url.searchParams.get('status')||'novo',q=clean(url.searchParams.get('q'),100);
+    if(!['novo','contatado','todos'].includes(status))fail(400,'Filtro inválido.');
+    const where=[],args=[];
+    if(status!=='todos'){where.push('status=?');args.push(status);}
+    if(q){where.push('(name LIKE ? OR city LIKE ?)');args.push('%'+q+'%','%'+q+'%');}
+    const from=' FROM availability_leads'+(where.length?' WHERE '+where.join(' AND '):'');
+    const total=(await db.prepare('SELECT COUNT(*) total'+from).bind(...args).first()).total;
+    const pages=Math.max(1,Math.ceil(total/10)),page=Math.min(pages,Math.max(1,parseInt(url.searchParams.get('page'))||1));
+    const rows=await db.prepare('SELECT id,name,city,stay_date,status,created_at,contacted_at'+from+' ORDER BY created_at DESC,id LIMIT 10 OFFSET ?').bind(...args,(page-1)*10).all();
+    return json({rows:rows.results,total,page,pages});
+  }
+  if(path==='/return-dispatch'&&req.method==='POST'){
+    if(!req.headers.get('content-type')?.includes('application/x-www-form-urlencoded'))fail(415,'Formulário inválido.');
+    const raw=await req.text();if(raw.length>50000)fail(413,'Mensagem muito grande.');
+    const f=new URLSearchParams(raw),id=clean(f.get('id'),80),message=f.get('message')||'';
+    if(!message.trim()||message.length>4000)fail(400,'Informe uma mensagem de até 4.000 caracteres.');
+    const lead=await db.prepare('SELECT id,name,phone FROM availability_leads WHERE id=?').bind(id).first();
+    if(!lead)fail(404,'Pedido não encontrado.');
+    await db.prepare("UPDATE availability_leads SET status='contatado',contacted_at=CURRENT_TIMESTAMP,contacted_by=? WHERE id=?").bind(user.id,id).run();
+    await audit(user.id,'abriu_whatsapp_retorno',id);
+    return new Response(null,{status:303,headers:{Location:'https://wa.me/'+lead.phone+'?text='+encodeURIComponent(message.trim().replaceAll('{nome}',lead.name.split(/\s+/)[0])),'Cache-Control':'no-store'}});
+  }
+  fail(404,'Recurso não encontrado.');
+}
+
 async function api(req, env, path) {
   if(!env.DB) fail(503,'Banco ainda não configurado. Vincule o banco D1 à variável DB no Cloudflare.');
   const db=env.DB, now=Date.now(), method=req.method;
@@ -466,9 +513,12 @@ async function api(req, env, path) {
   if (!user) fail(401,'Entre para acessar a plataforma.');
   if (path==='/me' && method==='GET') {
     const {expires_at,...profile} = user;
-    const headers = user.role==='admin' ? {'Set-Cookie':reservationsCookie(token,Math.ceil((expires_at-now)/1000))} : {};
-    return json(profile,200,headers);
+    const age=Math.ceil((expires_at-now)/1000),headers=new Headers();
+    if(user.role==='admin')headers.append('Set-Cookie',reservationsCookie(token,age));
+    headers.append('Set-Cookie',returnCookie(token,age));
+    const response=json(profile);for(const cookie of headers.getSetCookie())response.headers.append('Set-Cookie',cookie);return response;
   }
+  if(path==='/return-leads'||path==='/return-dispatch')return manageReturn(req,db,path,user,audit);
   if(path==='/rooms' || path.startsWith('/rooms/') || path==='/customers' || path.startsWith('/customers/') || path==='/reservations' || path.startsWith('/reservations/'))
     return manageReservations(req,db,path,user,audit);
   if(path==='/base-cities' && method==='GET'){
@@ -647,6 +697,11 @@ export default {
         response = Response.redirect(new URL(legacyPage+url.search,url),308);
       else if ((path==='/reservas' || path==='/reservas/') && ['GET','HEAD'].includes(req.method))
         response = await env.ASSETS.fetch(new Request(new URL('/reservar/'+url.search,url),req));
+      else if (path==='/retorno' || path.startsWith('/retorno/')) {
+        const token=sessionToken(req,'curio_return');
+        const user=env.DB&&token?await staffForToken(env.DB,await sha(token),Date.now()):null;
+        response=user?await env.ASSETS.fetch(req):Response.redirect(new URL('/campanhas/?continuar=retorno',url),303);
+      }
       else if (path==='/reservarquarto' || path.startsWith('/reservarquarto/')) {
         const token = sessionToken(req,'curio_booking_admin');
         const user = env.DB && token ? await staffForToken(env.DB,await sha(token),Date.now()) : null;
@@ -676,6 +731,7 @@ export default {
       }
       else if (/^\/api\/room-photos\/[a-f0-9-]{36}$/.test(path) && ['GET','HEAD'].includes(req.method))
         response=await roomPhoto(req,env,path.split('/').at(-1));
+      else if(path==='/api/disponibilidade')response=await availabilityRequest(req,env);
       else if(path.startsWith('/api/reserva/')) response=await publicReservations(req,env,path.slice('/api/reserva'.length));
       else if(path.startsWith('/api/campanhas/')) response=await api(req,env,path.slice('/api/campanhas'.length));
       else if(['/usuarios','/usuarios/','/mensagens','/mensagens/'].includes(path))response=await env.ASSETS.fetch(new Request(new URL('/campanhas/',req.url),req));
@@ -684,7 +740,7 @@ export default {
     } catch(e) { response=json({error:e.status ? e.message : 'Não foi possível concluir. Tente novamente.'},e.status || 500); }
     const headers=new Headers(response.headers);
     headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','same-origin');headers.set('X-Frame-Options','DENY');
-    if(['/campanhas','/painel','/usuarios','/mensagens','/clientes','/reservas','/reserva','/reservar','/gestaodereservaaa','/reservarquarto','/api/'].some(p=>path.startsWith(p))) {
+    if(['/retorno','/campanhas','/painel','/usuarios','/mensagens','/clientes','/reservas','/reserva','/reservar','/gestaodereservaaa','/reservarquarto','/api/'].some(p=>path.startsWith(p))) {
       headers.set('Cache-Control','no-store');
       headers.set('Referrer-Policy','no-referrer');
       headers.set('X-Robots-Tag','noindex');

@@ -149,7 +149,7 @@ html{scroll-behavior:smooth;scroll-padding-top:25px}.screen{min-height:0;padding
 .curio-story-description{margin-top:12px;padding-bottom:5px}.curio-story-description>.curio-reserve-jump{position:absolute;top:8px;right:0;width:44px;height:44px;margin:0}.curio-story-description>span{display:block;padding-inline:48px}.curio-presentation{padding-bottom:8px}.curio-story-status:empty{display:none}.curio-floral-transition{height:70px}.curio-botanical-left,.curio-botanical-right{top:-25px}
 @media(max-width:800px){.curio-presentation{padding-bottom:6px}.curio-floral-transition{height:60px}.curio-botanical-left,.curio-botanical-right{top:-20px}}
 @media(max-width:480px){.curio-story-description{margin-top:10px;padding-top:18px;padding-bottom:4px}.curio-story-description>.curio-reserve-jump{top:3px;right:0;width:44px;height:44px}.curio-story-description h2{margin-top:12px}.curio-floral-transition{height:50px}.curio-botanical-left,.curio-botanical-right{top:-14px}}
-</style><script type="module" src="/metricas.js?v=20261116-3"></script></head><body><main class="shell"><div class="curio-intro"><section class="screen cover" id="capa" aria-label="Boas-vindas ao Hotel Fazenda Curió">
+</style><script type="module" src="/metricas.js?v=20261116-3"></script><link rel="stylesheet" href="/assets/disponibilidade.css"><script type="module" src="/assets/disponibilidade.js"></script></head><body><main class="shell"><div class="curio-intro"><section class="screen cover" id="capa" aria-label="Boas-vindas ao Hotel Fazenda Curió">
 <header class="home-header"><a href="#capa" class="home-brand" aria-label="Hotel Fazenda Curió — início"><img class="logo" src="logo.jpg" alt=""><span>Fazenda Curió<small>HOTEL FAZENDA</small></span></a></header>
 <div class="home-hero"><div class="home-copy"><span class="eyebrow">SINTA-SE EM CASA</span><h1>Sua casa de campo<br><em>pertinho de Belém</em></h1><p>Natureza, conforto e boa gastronomia.</p></div><img class="home-art" src="curio-aquarela.jpg" alt="Aquarela da Casa da Árvore do Curió, cercada de folhagens e bougainvílias rosas, magenta e brancas"></div>
 <div class="curio-scroll-cue">Role para conhecer<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M6 14l6 6 6-6"/></svg></div>
@@ -185,7 +185,16 @@ html{scroll-behavior:smooth;scroll-padding-top:25px}.screen{min-height:0;padding
     </ul>
     <p class="curio-host-signature"><span class="curio-host-by">Por</span><span>Carla H. H. Teixeira</span></p>
     <p><a href="/reservas/">Consultar datas disponíveis</a></p>
-    <a class="curio-stay-reserve" href="https://wa.me/5591991400045?text=Ol%C3%A1%2C%20Carla!%20Gostaria%20de%20saber%20as%20disponibilidades%20e%20receber%20um%20or%C3%A7amento%20para%20meu%20fim%20de%20semana%20no%20Curi%C3%B3." target="_blank" rel="noopener"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11.7a8 8 0 0 1-11.8 7L4 20l1.3-4.2A8 8 0 1 1 20 11.7Z"/><path d="M9 7.5c-.7 0-1 1.2-.6 2.2.9 2.5 2.4 4.1 4.9 5 .9.3 2.2-.1 2.2-.8l-2-1.2-.9.7a7 7 0 0 1-2.8-2.8l.7-.9Z"/></svg><span>Reserve pelo WhatsApp</span></a>
+    <button class="curio-stay-reserve" type="button" id="availability-toggle" aria-expanded="false" aria-controls="availability-form"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11.7a8 8 0 0 1-11.8 7L4 20l1.3-4.2A8 8 0 1 1 20 11.7Z"/><path d="M9 7.5c-.7 0-1 1.2-.6 2.2.9 2.5 2.4 4.1 4.9 5 .9.3 2.2-.1 2.2-.8l-2-1.2-.9.7a7 7 0 0 1-2.8-2.8l.7-.9Z"/></svg><span>Quero saber a disponibilidade por Whatsapp</span></button>
+    <form id="availability-form" class="availability-form" hidden>
+      <label>Nome<input name="name" autocomplete="name" maxlength="120" required></label>
+      <label>WhatsApp<input name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="40" placeholder="(91) 99999-9999" required></label>
+      <label>Cidade<input name="city" autocomplete="address-level2" maxlength="100" required></label>
+      <label>Data de intenção para hospedagem<input name="stay_date" type="date" required></label>
+      <p>Usaremos seus dados para responder ao seu pedido de disponibilidade.</p>
+      <button type="submit" class="curio-stay-reserve">Consultar pelo WhatsApp</button>
+      <p id="availability-status" role="status" aria-live="polite"></p>
+    </form>
   </div>
 </section>
 

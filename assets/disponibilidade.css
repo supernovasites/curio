@@ -1,0 +1,11 @@
+.curio-stay-reserve{border:0;cursor:pointer;text-align:center}
+.availability-form[hidden]{display:none}
+.availability-form{margin-top:22px;max-width:620px;padding-top:20px;border-top:1px solid #dfe3d7;display:grid;grid-template-columns:1fr 1fr;gap:16px;font:15px/1.5 Arial,sans-serif;color:#294734}
+.availability-form label{display:flex;flex-direction:column;gap:6px;min-width:0}
+.availability-form input{box-sizing:border-box;width:100%;min-height:46px;padding:10px 12px;border:1px solid #b9c5af;border-radius:6px;background:#fffefb;color:#294734;font:16px Arial,sans-serif}
+.availability-form input:focus-visible,.curio-stay-reserve:focus-visible{outline:3px solid #a38643;outline-offset:3px}
+.availability-form button,.availability-form p{grid-column:1/-1}
+.availability-form p{margin:0;font:14px/1.5 Arial,sans-serif}
+.availability-form button:disabled{opacity:.6;cursor:wait}
+#availability-status a{text-decoration:underline}
+@media(max-width:600px){.availability-form{grid-template-columns:1fr}.availability-form button{white-space:normal}}
