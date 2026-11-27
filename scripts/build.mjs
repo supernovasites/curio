@@ -37,11 +37,11 @@ await writeFile('dist/_routes.json',JSON.stringify({version:1,include:['/api/*',
 console.log('Build concluído em dist. Nenhum dado pessoal ou credencial incluído.');
 
 // Home-screen identity shared by every public and protected HTML page.
-const iconHead='<link rel="apple-touch-icon" sizes="180x180" href="/assets/site-icon-180.png"><link rel="icon" type="image/png" sizes="192x192" href="/assets/site-icon-192.png"><link rel="manifest" href="/site.webmanifest"><meta name="apple-mobile-web-app-title" content="Fazenda Curió"><meta name="application-name" content="Fazenda Curió">';
-for(const size of [180,192,512])await copyFile('assets/site-icon-'+size+'.png','dist/assets/site-icon-'+size+'.png');
-await copyFile('assets/site-icon-180.png','dist/apple-touch-icon.png');
-await copyFile('assets/site-icon-180.png','dist/apple-touch-icon-precomposed.png');
-await writeFile('dist/site.webmanifest',JSON.stringify({name:'Fazenda Curió',short_name:'Curió',display:'standalone',background_color:'#fcfaf5',theme_color:'#254937',icons:[192,512].map(size=>({src:'/assets/site-icon-'+size+'.png',sizes:size+'x'+size,type:'image/png',purpose:'any'}))}));
+const iconHead='<link rel="apple-touch-icon" sizes="180x180" href="/assets/site-icon-black-180.png"><link rel="icon" type="image/png" sizes="192x192" href="/assets/site-icon-black-192.png"><link rel="manifest" href="/site.webmanifest"><meta name="apple-mobile-web-app-title" content="Fazenda Curió"><meta name="application-name" content="Fazenda Curió">';
+for(const size of [180,192,512])await copyFile('assets/site-icon-black-'+size+'.png','dist/assets/site-icon-black-'+size+'.png');
+await copyFile('assets/site-icon-black-180.png','dist/apple-touch-icon.png');
+await copyFile('assets/site-icon-black-180.png','dist/apple-touch-icon-precomposed.png');
+await writeFile('dist/site.webmanifest',JSON.stringify({name:'Fazenda Curió',short_name:'Fazenda Curió',display:'standalone',background_color:'#fcfaf5',theme_color:'#254937',icons:[192,512].map(size=>({src:'/assets/site-icon-black-'+size+'.png',sizes:size+'x'+size,type:'image/png',purpose:'any'}))}));
 const {readdir}=await import('node:fs/promises');
 async function addHomeIcons(dir){for(const entry of await readdir(dir,{withFileTypes:true})){const file=dir+'/'+entry.name;if(entry.isDirectory())await addHomeIcons(file);else if(entry.name.endsWith('.html')){const html=await readFile(file,'utf8');await writeFile(file,html.replace('</head>',iconHead+'</head>'));}}}
 await addHomeIcons('dist');
