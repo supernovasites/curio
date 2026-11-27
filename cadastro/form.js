@@ -1,12 +1,13 @@
 import {ageOnDate} from '/campanhas/age.js';
 import {validCpf,maskCpf} from '/reservar/identity.js';
+import {bindDateInput,dateToIso} from '/assets/date-mask.js';
 export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
  form.classList.add('guest-registration-form');
  form.innerHTML=`<div class="guest-fields">
- <label>Data de Entrada *<input name="entry_date" type="date" required></label>
- <label>Data de Saída *<input name="exit_date" type="date" required></label>
+ <label>Data de Entrada *<input name="entry_date" type="text" inputmode="numeric" placeholder="DD/MM/AAAA" required></label>
+ <label>Data de Saída *<input name="exit_date" type="text" inputmode="numeric" placeholder="DD/MM/AAAA" required></label>
  <label class="wide">Nome completo *<input name="name" autocomplete="name" maxlength="120" required></label>
- <label>Data de Nascimento *<input name="birth_date" type="date" autocomplete="bday" required></label>
+ <label>Data de Nascimento *<input name="birth_date" type="text" inputmode="numeric" placeholder="DD/MM/AAAA" autocomplete="bday" required></label>
  <label>Idade<input name="age" readonly aria-describedby="age-help"></label>
  <label>CPF *<input name="cpf" inputmode="numeric" maxlength="14" required></label>
  <label>RG *<input name="rg" maxlength="30" required></label>
@@ -29,9 +30,8 @@ export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
  const field=name=>form.elements[name],status=form.querySelector('.form-status');
  const ageHelp=form.querySelector('#age-help');ageHelp.id='age-help-'+crypto.randomUUID();field('age').setAttribute('aria-describedby',ageHelp.id);
  for(const name of ['entry_date','exit_date','name','birth_date','cpf','rg','occupation','dietary_restrictions','notes'])field(name).value=profile[name]||'';
- const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
- field('birth_date').max=today;
- const updateAge=()=>{field('age').value=ageOnDate(field('birth_date').value)??'';};updateAge();field('birth_date').oninput=updateAge;
+ for(const name of ['entry_date','exit_date','birth_date'])bindDateInput(field(name));
+ const updateAge=()=>{field('age').value=ageOnDate(dateToIso(field('birth_date').value))??'';};updateAge();field('birth_date').oninput=updateAge;
  const cpfMask=input=>{input.addEventListener('input',()=>{input.value=maskCpf(input.value);input.setCustomValidity('');});};cpfMask(field('cpf'));
  const editor=form.querySelector('.companion-editor'),add=form.querySelector('[data-add-companion]'),list=form.querySelector('.companion-list'),error=form.querySelector('.companion-error');
  let companions=(profile.companions||[]).map(c=>({...c})),editing=-1,saving=false;
@@ -54,6 +54,10 @@ export function guestForm(form,profile={}, {publicForm=false,onSave}={}){
  form.addEventListener('submit',async event=>{
   event.preventDefault();if(saving)return;status.classList.remove('error');status.textContent='';
   const data=Object.fromEntries(new FormData(form));data.cpf=data.cpf.replace(/\D/g,'');
+  for(const name of ['entry_date','exit_date','birth_date']){
+   data[name]=dateToIso(data[name]);
+   if(!data[name]){field(name).setCustomValidity('Digite uma data válida no formato DD/MM/AAAA.');field(name).reportValidity();return;}
+  }
   if(!validCpf(data.cpf)){field('cpf').setCustomValidity('Informe um CPF válido.');field('cpf').reportValidity();return;}
   if(!editor.hidden){status.textContent='Salve ou cancele o acompanhante atual antes de enviar o cadastro.';status.classList.add('error');return;}
   if(data.exit_date<=data.entry_date){field('exit_date').setCustomValidity('A saída deve ser posterior à entrada.');field('exit_date').reportValidity();return;}

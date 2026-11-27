@@ -1,4 +1,5 @@
 import {maskPhone} from './phone-mask.js';
+import {bindDateInput,dateToIso} from './date-mask.js';
 const toggle=document.getElementById('availability-toggle');
 const form=document.getElementById('availability-form');
 const phone=form.elements.phone;
@@ -11,7 +12,7 @@ phone.addEventListener('input',()=>{
 });
 phone.addEventListener('blur',()=>{phone.value=maskPhone(phone.value);});
 const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-form.elements.stay_date.min=day;
+bindDateInput(form.elements.stay_date);
 let requestKey=crypto.randomUUID();
 toggle.addEventListener('click',()=>{
  const open=form.hidden;
@@ -21,9 +22,11 @@ toggle.addEventListener('click',()=>{
 form.addEventListener('input',()=>{requestKey=crypto.randomUUID();});
 form.addEventListener('submit',async event=>{
  event.preventDefault();const button=event.submitter,status=document.getElementById('availability-status');
+ const dataToSend={...Object.fromEntries(new FormData(form)),request_key:requestKey};dataToSend.stay_date=dateToIso(dataToSend.stay_date);
+ if(!dataToSend.stay_date||dataToSend.stay_date<day){form.elements.stay_date.setCustomValidity('Digite uma data de hospedagem válida a partir de hoje, no formato DD/MM/AAAA.');form.elements.stay_date.reportValidity();return;}
  button.disabled=true;status.textContent='Salvando seu pedido…';
  try{
-  const response=await fetch('/api/disponibilidade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...Object.fromEntries(new FormData(form)),request_key:requestKey})});
+  const response=await fetch('/api/disponibilidade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dataToSend)});
   const data=await response.json();if(!response.ok)throw Error(data.error||'Não foi possível salvar. Tente novamente.');
   status.replaceChildren(document.createTextNode('Pedido salvo. '));
   const link=document.createElement('a');link.href=data.whatsapp_url;link.textContent='Continuar no WhatsApp';status.append(link);

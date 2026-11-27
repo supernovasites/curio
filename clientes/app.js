@@ -1,5 +1,5 @@
 import {renderHeader} from '/campanhas/nav.js';
-import {guestForm} from '/cadastro/form.js';
+import {guestForm} from '/cadastro/form.js?v=20261127-date-mask';
 const $=selector=>document.querySelector(selector);
 let approvalPage=1,customerPage=1,customerQuery='',approvalsVersion=0,customersVersion=0;
 function message(text,error=false){$('#status').textContent=text;$('#status').classList.toggle('error',error);}
