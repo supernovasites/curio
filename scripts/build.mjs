@@ -23,7 +23,7 @@ await copyFile('reservas/quartos.js','dist/reservarquarto/quartos/app.js');
 for(const f of ['index.html','app.js'])await copyFile('clientes/'+f,'dist/clientes/'+f);
 for(const f of ['index.html','app.js','form.js','style.css','flores.svg'])await copyFile('cadastro/'+f,'dist/cadastro/'+f);
 for(const f of ['index.html','app.js','style.css'])await copyFile('retorno/'+f,'dist/retorno/'+f);
-for(const f of ['disponibilidade.js','disponibilidade.css'])await copyFile('assets/'+f,'dist/assets/'+f);
+for(const f of ['disponibilidade.js','disponibilidade.css','phone-mask.js'])await copyFile('assets/'+f,'dist/assets/'+f);
 await copyFile('metricas.js','dist/metricas.js');
 const {readFile}=await import('node:fs/promises');
 const csv=await readFile('campanhas/csv.js','utf8');

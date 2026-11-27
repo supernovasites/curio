@@ -1,5 +1,15 @@
+import {maskPhone} from './phone-mask.js';
 const toggle=document.getElementById('availability-toggle');
 const form=document.getElementById('availability-form');
+const phone=form.elements.phone;
+phone.addEventListener('input',()=>{
+ const raw=phone.value,position=phone.selectionStart??raw.length;
+ let count=raw.slice(0,position).replace(/\D/g,'').length;
+ if(raw.replace(/\D/g,'').startsWith('55')&&raw.replace(/\D/g,'').length>11)count=Math.max(0,count-2);
+ phone.value=maskPhone(raw);
+ if(position<raw.length){let caret=0,seen=0;while(caret<phone.value.length&&seen<count){if(/\d/.test(phone.value[caret]))seen++;caret++;}phone.setSelectionRange(caret,caret);}
+});
+phone.addEventListener('blur',()=>{phone.value=maskPhone(phone.value);});
 const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 form.elements.stay_date.min=day;
 let requestKey=crypto.randomUUID();
