@@ -1,5 +1,15 @@
 # Fazenda Curió — relacionamento
 
+## Cadastro público de hospedagem
+
+`/cadastro/` recebe Data de Entrada, Data de Saída, Nome completo, Data de Nascimento, Idade calculada, CPF, RG e Profissão. Acompanhantes ficam em uma seção expansível: cada pessoa deve ser salva antes da próxima, com Nome, CPF, RG e Idade. Restrições alimentares e Observações são campos livres. A aquarela e as flores da homepage ilustram a página pública.
+
+O envio público cria uma ficha **pendente**, sem incluir automaticamente um contato na base. Em `/clientes/`, somente administradores podem revisar, editar, aprovar ou recusar essas fichas. A aprovação inclui o cliente na base; caso o CPF já tenha uma conta, associa a ficha ao contato existente. Editar dados de um cliente não apaga seu telefone, cidade ou histórico de campanhas. A aprovação do cadastro não confirma nem cria reserva.
+
+A página Clientes tem um menu suspenso para cadastro manual, um tópico de aprovação e a lista de clientes editáveis. O cadastro feito pelo administrador já é salvo como aprovado. As fichas antigas recebem os novos campos quando editadas. Mudanças nos dados de identificação revogam as sessões do cliente. Alterações simultâneas usam controle de versão. CPF e RG ficam disponíveis apenas nas APIs autenticadas de administração; o envio público não oferece consulta dos dados recebidos.
+
+Antes da publicação, aplique somente `migrations/0012_guest_registrations.sql` no D1 existente. A migração cria a tabela de fichas e seus índices sem alterar contatos, reservas ou contas existentes. Build: `node scripts/build.mjs`. Testes do fluxo: `node --test tests/guest-registration.test.mjs tests/retorno.test.mjs`.
+
 ## Pedidos de disponibilidade e retorno
 
 O botão de WhatsApp na homepage abre os campos Nome, WhatsApp, Cidade e Data de intenção para hospedagem. O envio salva o pedido antes de abrir a conversa com a anfitriã, com os dados preenchidos. O cliente confirma o envio no WhatsApp. Há validação de telefone e data, limite de pedidos e uma chave de repetição que evita duplicar o mesmo envio após falha de conexão.

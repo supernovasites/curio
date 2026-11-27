@@ -437,6 +437,117 @@ const reservationsCookie = (token, maxAge) =>
 
 const returnCookie=(token,maxAge)=>'curio_return='+token+'; Path=/retorno; HttpOnly; Secure; SameSite=Strict; Max-Age='+maxAge;
 
+function guestData(input){
+  if(!input||typeof input!=='object')fail(400,'Cadastro inválido.');
+  const entry=dateOnly(input.entry_date),exit=dateOnly(input.exit_date),birth=dateOnly(input.birth_date),age=ageOnDate(birth);
+  const name=clean(input.name,120),cpf=readCpf(input.cpf),rg=clean(input.rg,30),occupation=clean(input.occupation,120);
+  if(!entry||entry!==input.entry_date||!exit||exit!==input.exit_date||exit<=entry||!birth||birth!==input.birth_date||age===null||age<0||age>125||!name||!rg||!occupation)fail(400,'Confira as datas, nome completo, nascimento, CPF, RG e profissão. A saída deve ser posterior à entrada.');
+  if(!Array.isArray(input.companions)||input.companions.length>20)fail(400,'Informe até 20 acompanhantes.');
+  const seen=new Set([cpf]);
+  const companions=input.companions.map(person=>{
+    if(!person||typeof person!=='object')fail(400,'Acompanhante inválido.');
+    const name=clean(person.name,120),cpf=readCpf(person.cpf),rg=clean(person.rg,30),age=person.age;
+    if(!name||!rg||!Number.isInteger(age)||age<0||age>125||seen.has(cpf))fail(400,'Confira nome, CPF, RG e idade dos acompanhantes. Cada CPF deve ser único.');
+    seen.add(cpf);return {name,cpf,rg,age};
+  });
+  return {entry_date:entry,exit_date:exit,name,birth_date:birth,cpf,rg,occupation,companions,dietary_restrictions:clean(input.dietary_restrictions,2000),notes:clean(input.notes,2000)};
+}
+const guestValues=data=>[data.entry_date,data.exit_date,data.name,data.birth_date,data.cpf,data.rg,data.occupation,JSON.stringify(data.companions),data.dietary_restrictions,data.notes];
+const guestColumns='entry_date,exit_date,name,birth_date,cpf,rg,occupation,companions,dietary_restrictions,notes';
+function readGuest(row){return {...row,companions:JSON.parse(row.companions||'[]'),age:ageOnDate(row.birth_date)};}
+function guestConflict(error){
+  if(/UNIQUE constraint failed: (guest_registrations\.(cpf|contact_id)|customer_accounts\.(cpf|contact_id))/i.test(error.message))fail(409,'Já existe um cadastro com este CPF. Revise os dados ou fale com a administração.');
+  throw error;
+}
+async function publicGuestRegistration(req,env){
+  if(req.method!=='POST')fail(405,'Método não permitido.');
+  if(!sameOriginRequest(req))fail(403,'Origem inválida.');
+  if(!env.DB)fail(503,'Cadastro temporariamente indisponível. Tente novamente.');
+  const input=await body(req),data=guestData(input),key=clean(input.request_key,50),db=env.DB;
+  if(!/^[a-f0-9-]{36}$/i.test(key))fail(400,'Atualize a página e tente novamente.');
+  await customerLimit(db,await sha('guest-registration-ip:'+(req.headers.get('CF-Connecting-IP')||'local')),10);
+  const previous=await db.prepare('SELECT '+guestColumns+' FROM guest_registrations WHERE request_key=?').bind(key).first();
+  if(previous){if(JSON.stringify(guestValues(readGuest(previous)))!==JSON.stringify(guestValues(data)))fail(409,'Atualize a página para enviar outro cadastro.');return json({ok:true,status:'pending'},201);}
+  await customerLimit(db,await sha('guest-registration-cpf:'+data.cpf),5);
+  try{await db.prepare('INSERT INTO guest_registrations(id,request_key,'+guestColumns+') VALUES(?,?,'+Array(10).fill('?').join(',')+')').bind(crypto.randomUUID(),key,...guestValues(data)).run();}catch(error){guestConflict(error);}
+  return json({ok:true,status:'pending'},201);
+}
+async function approveGuest(db,row,user,prefix=[]){
+  const existing=await db.prepare('SELECT contact_id FROM customer_accounts WHERE cpf=?').bind(row.cpf).first();
+  const contactId=row.contact_id||existing?.contact_id||row.id;
+  const guard='SELECT 1 FROM guest_registrations WHERE id=? AND version=? AND status=\'pending\'';
+  const conditions=[row.id,row.version];
+  const statements=[...prefix,
+    db.prepare("INSERT INTO contacts(id,source_key,name,birth_date,occupation,registered_at) SELECT ?,?,?,?,?,? WHERE EXISTS("+guard+") ON CONFLICT(id) DO UPDATE SET name=excluded.name,birth_date=excluded.birth_date,occupation=excluded.occupation").bind(contactId,contactId,row.name,row.birth_date,row.occupation,localDay(),...conditions),
+    db.prepare('DELETE FROM customer_sessions WHERE contact_id=? AND EXISTS('+guard+')').bind(contactId,...conditions),
+    db.prepare("INSERT INTO customer_accounts(contact_id,cpf,password_hash) SELECT ?,?,'' WHERE EXISTS("+guard+") ON CONFLICT(contact_id) DO UPDATE SET cpf=excluded.cpf").bind(contactId,row.cpf,...conditions),
+    db.prepare("UPDATE guest_registrations SET status='approved',contact_id=?,reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=? AND status='pending'").bind(contactId,user.id,...conditions)
+  ];
+  try{const results=await db.batch(statements);if(Number(results.at(-1).meta?.changes??results.at(-1).changes)!==1)fail(409,'Cadastro alterado por outra pessoa. Atualize a lista.');}catch(error){guestConflict(error);}
+  return contactId;
+}
+async function saveGuest(db,row,data,user){
+  const statements=[];
+  if(row.status==='approved'){
+    const guard='EXISTS(SELECT 1 FROM guest_registrations WHERE id=? AND version=?)';
+    statements.push(db.prepare('UPDATE contacts SET name=?,birth_date=?,occupation=? WHERE id=? AND '+guard).bind(data.name,data.birth_date,data.occupation,row.contact_id,row.id,row.version));
+    statements.push(db.prepare('DELETE FROM customer_sessions WHERE contact_id=? AND '+guard).bind(row.contact_id,row.id,row.version));
+    statements.push(db.prepare("INSERT INTO customer_accounts(contact_id,cpf,password_hash) SELECT ?,?,'' WHERE "+guard+' ON CONFLICT(contact_id) DO UPDATE SET cpf=excluded.cpf').bind(row.contact_id,data.cpf,row.id,row.version));
+  }
+  statements.push(db.prepare('UPDATE guest_registrations SET '+guestColumns.split(',').map(column=>column+'=?').join(',')+',updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=?').bind(...guestValues(data),row.id,row.version));
+  try{const results=await db.batch(statements);if(Number(results.at(-1).meta?.changes??results.at(-1).changes)!==1)fail(409,'Cadastro alterado por outra pessoa. Atualize a lista.');}catch(error){guestConflict(error);}
+}
+async function manageGuests(req,db,path,user,audit){
+  if(user.role!=='admin')fail(403,'Somente administradores podem gerenciar cadastros.');
+  const method=req.method,url=new URL(req.url);
+  if(path==='/guest-registrations'&&method==='GET'){
+    const status=url.searchParams.get('status')||'pending';if(!['pending','approved','rejected'].includes(status))fail(400,'Situação inválida.');
+    const total=(await db.prepare('SELECT COUNT(*) total FROM guest_registrations WHERE status=?').bind(status).first()).total;
+    const pages=Math.max(1,Math.ceil(total/10)),page=Math.min(pages,Math.max(1,parseInt(url.searchParams.get('page'))||1));
+    const rows=await db.prepare('SELECT id,name,entry_date,exit_date,status,version,created_at FROM guest_registrations WHERE status=? ORDER BY created_at DESC,id LIMIT 10 OFFSET ?').bind(status,(page-1)*10).all();
+    return json({rows:rows.results,total,pages,page});
+  }
+  const match=path.match(/^\/guest-registrations\/([\w-]+)(?:\/(approve|reject))?$/);
+  if(match){
+    const row=await db.prepare('SELECT * FROM guest_registrations WHERE id=?').bind(match[1]).first();if(!row)fail(404,'Cadastro não encontrado.');
+    if(!match[2]&&method==='GET')return json(readGuest(row));
+    if((method==='PATCH'&&!match[2])||(method==='POST'&&match[2])){
+      const input=await body(req);if(input.version!==row.version)fail(409,'Cadastro alterado por outra pessoa. Atualize a lista.');
+      if(!match[2]){await saveGuest(db,row,guestData(input),user);await audit(user.id,'editou_ficha_hospedagem',row.id);return json({ok:true});}
+      if(row.status!=='pending')fail(409,'Este cadastro já foi revisado.');
+      if(match[2]==='approve'){const contactId=await approveGuest(db,row,user);await audit(user.id,'aprovou_cadastro_publico',row.id);return json({ok:true,contact_id:contactId});}
+      const result=await db.prepare("UPDATE guest_registrations SET status='rejected',reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=? AND status='pending'").bind(user.id,row.id,row.version).run();
+      if(Number(result.meta?.changes??result.changes)!==1)fail(409,'Cadastro já revisado.');await audit(user.id,'recusou_cadastro_publico',row.id);return json({ok:true});
+    }
+  }
+  const profileMatch=path.match(/^\/guest-profiles\/([\w-]+)$/);
+  if(profileMatch){
+    const contactId=profileMatch[1],row=await db.prepare('SELECT * FROM guest_registrations WHERE contact_id=?').bind(contactId).first();
+    const contact=await db.prepare('SELECT c.id contact_id,c.name,c.birth_date,c.occupation,a.cpf FROM contacts c LEFT JOIN customer_accounts a ON a.contact_id=c.id WHERE c.id=?').bind(contactId).first();if(!contact)fail(404,'Cliente não encontrado.');
+    if(method==='GET')return json(row?readGuest(row):{...contact,companions:[],version:0});
+    if(method==='PATCH'){
+      const input=await body(req),data=guestData(input);if(input.version!==(row?.version||0))fail(409,'Cadastro alterado por outra pessoa. Atualize a lista.');
+      if(row)await saveGuest(db,row,data,user);
+      else{
+        try{await db.batch([
+          db.prepare("INSERT INTO guest_registrations(id,contact_id,status,"+guestColumns+",reviewed_by,reviewed_at) VALUES(?,?,'approved',"+Array(10).fill('?').join(',')+",?,CURRENT_TIMESTAMP)").bind(crypto.randomUUID(),contactId,...guestValues(data),user.id),
+          db.prepare('UPDATE contacts SET name=?,birth_date=?,occupation=? WHERE id=?').bind(data.name,data.birth_date,data.occupation,contactId),
+          db.prepare('DELETE FROM customer_sessions WHERE contact_id=?').bind(contactId),
+          db.prepare("INSERT INTO customer_accounts(contact_id,cpf,password_hash) VALUES(?,?,'') ON CONFLICT(contact_id) DO UPDATE SET cpf=excluded.cpf").bind(contactId,data.cpf)
+        ]);}catch(error){guestConflict(error);}
+      }
+      await audit(user.id,'editou_ficha_cliente',contactId);return json({ok:true});
+    }
+  }
+  if(path==='/guest-registrations'&&method==='POST'){
+    const data=guestData(await body(req)),id=crypto.randomUUID();
+    const insert=db.prepare('INSERT INTO guest_registrations(id,'+guestColumns+') VALUES(?,'+Array(10).fill('?').join(',')+')').bind(id,...guestValues(data));
+    const contactId=await approveGuest(db,{...data,id,version:1},user,[insert]);
+    await audit(user.id,'cadastrou_ficha_manual',id);return json({id,contact_id:contactId,status:'approved'},201);
+  }
+  fail(404,'Recurso não encontrado.');
+}
+
 async function availabilityRequest(req,env){
   if(req.method!=='POST')fail(405,'Método não permitido.');
   if(!sameOriginRequest(req))fail(403,'Origem inválida.');
@@ -514,11 +625,15 @@ async function api(req, env, path) {
   if (path==='/me' && method==='GET') {
     const {expires_at,...profile} = user;
     const age=Math.ceil((expires_at-now)/1000),headers=new Headers();
-    if(user.role==='admin')headers.append('Set-Cookie',reservationsCookie(token,age));
+    if(user.role==='admin'){
+      headers.append('Set-Cookie',reservationsCookie(token,age));
+      headers.append('Set-Cookie','curio_client_admin='+token+'; Path=/clientes; HttpOnly; Secure; SameSite=Strict; Max-Age='+age);
+    }
     headers.append('Set-Cookie',returnCookie(token,age));
     const response=json(profile);for(const cookie of headers.getSetCookie())response.headers.append('Set-Cookie',cookie);return response;
   }
   if(path==='/return-leads'||path==='/return-dispatch')return manageReturn(req,db,path,user,audit);
+  if(path==='/guest-registrations'||path.startsWith('/guest-registrations/')||path.startsWith('/guest-profiles/'))return manageGuests(req,db,path,user,audit);
   if(path==='/rooms' || path.startsWith('/rooms/') || path==='/customers' || path.startsWith('/customers/') || path==='/reservations' || path.startsWith('/reservations/'))
     return manageReservations(req,db,path,user,audit);
   if(path==='/base-cities' && method==='GET'){
@@ -697,6 +812,13 @@ export default {
         response = Response.redirect(new URL(legacyPage+url.search,url),308);
       else if ((path==='/reservas' || path==='/reservas/') && ['GET','HEAD'].includes(req.method))
         response = await env.ASSETS.fetch(new Request(new URL('/reservar/'+url.search,url),req));
+      else if (path==='/clientes' || path.startsWith('/clientes/')) {
+        const token=sessionToken(req,'curio_client_admin');
+        const user=env.DB&&token?await staffForToken(env.DB,await sha(token),Date.now()):null;
+        if(!user)response=Response.redirect(new URL('/campanhas/?continuar=clientes',url),303);
+        else if(user.role!=='admin')fail(403,'Somente administradores podem acessar Clientes.');
+        else response=await env.ASSETS.fetch(req);
+      }
       else if (path==='/retorno' || path.startsWith('/retorno/')) {
         const token=sessionToken(req,'curio_return');
         const user=env.DB&&token?await staffForToken(env.DB,await sha(token),Date.now()):null;
@@ -731,6 +853,7 @@ export default {
       }
       else if (/^\/api\/room-photos\/[a-f0-9-]{36}$/.test(path) && ['GET','HEAD'].includes(req.method))
         response=await roomPhoto(req,env,path.split('/').at(-1));
+      else if(path==='/api/cadastro')response=await publicGuestRegistration(req,env);
       else if(path==='/api/disponibilidade')response=await availabilityRequest(req,env);
       else if(path.startsWith('/api/reserva/')) response=await publicReservations(req,env,path.slice('/api/reserva'.length));
       else if(path.startsWith('/api/campanhas/')) response=await api(req,env,path.slice('/api/campanhas'.length));

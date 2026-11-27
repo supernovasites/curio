@@ -1,7 +1,7 @@
 import { mkdir,copyFile,writeFile } from 'node:fs/promises';
 await mkdir('dist/campanhas',{recursive:true});
 await mkdir('dist/painel',{recursive:true});
-for(const path of ['reservar','reservarquarto','clientes','retorno']) await mkdir('dist/'+path,{recursive:true});
+for(const path of ['reservar','reservarquarto','clientes','retorno','cadastro']) await mkdir('dist/'+path,{recursive:true});
 await mkdir('dist/assets',{recursive:true});
 await mkdir('dist/assets/quartos',{recursive:true});
 for (const id of ['anexo-3','anexo-4','anexo-5','arvore','manga-rosa','sede-3','sede-4'])
@@ -19,7 +19,8 @@ await copyFile('reservas/index.html','dist/reservarquarto/reservados/index.html'
 await mkdir('dist/reservarquarto/quartos',{recursive:true});
 await copyFile('reservas/quartos.html','dist/reservarquarto/quartos/index.html');
 await copyFile('reservas/quartos.js','dist/reservarquarto/quartos/app.js');
-await copyFile('reservas/index.html','dist/clientes/index.html');
+for(const f of ['index.html','app.js'])await copyFile('clientes/'+f,'dist/clientes/'+f);
+for(const f of ['index.html','app.js','form.js','style.css','flores.svg'])await copyFile('cadastro/'+f,'dist/cadastro/'+f);
 for(const f of ['index.html','app.js','style.css'])await copyFile('retorno/'+f,'dist/retorno/'+f);
 for(const f of ['disponibilidade.js','disponibilidade.css'])await copyFile('assets/'+f,'dist/assets/'+f);
 await copyFile('metricas.js','dist/metricas.js');
