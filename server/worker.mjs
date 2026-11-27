@@ -577,7 +577,10 @@ async function availabilityRequest(req,env){
   if(previous&&(previous.name!==name||previous.phone!==phone||previous.city!==city))fail(409,'Atualize o formulário para enviar outro pedido.');
   if(!previous){
     await customerLimit(db,await sha('availability-phone:'+phone),5);
-    await db.prepare('INSERT INTO availability_leads(id,request_key,name,phone,city,stay_date) VALUES(?,?,?,?,?,?) ON CONFLICT(request_key) DO NOTHING').bind(crypto.randomUUID(),key,name,phone,city,'').run();
+    await db.batch([
+      db.prepare('INSERT INTO availability_leads(id,request_key,name,phone,city,stay_date) VALUES(?,?,?,?,?,?) ON CONFLICT(request_key) DO NOTHING').bind(crypto.randomUUID(),key,name,phone,city,''),
+      db.prepare("INSERT INTO homepage_metrics(day,kind,count) SELECT ?,'whatsapp',1 WHERE changes()=1 ON CONFLICT(day,kind) DO UPDATE SET count=count+1").bind(localDay())
+    ]);
   }
   return json({ok:true,status:'aguardando_contato'},201);
 }

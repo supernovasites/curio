@@ -9,7 +9,7 @@ function adapter(sqlite){return {prepare(sql){const stmt=sqlite.prepare(sql);let
 test('availability requests validate, persist, retry safely and are private to authenticated staff',async t=>{
  t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,10,27,15)});
  const sqlite=new DatabaseSync(':memory:');t.after(()=>sqlite.close());
- for(const file of ['0001_campanhas','0011_availability_leads'])sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
+ for(const file of ['0001_campanhas','0002_homepage_metrics','0011_availability_leads'])sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
  sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)').run('operator','equipe','Equipe',await hashPassword('test-password'),'operador');
  const env={DB:adapter(sqlite),ASSETS:{fetch:async req=>new Response(new URL(req.url).pathname)}};
  const call=(path,method='GET',data,cookie,origin='https://curio.test')=>worker.fetch(new Request('https://curio.test'+path,{method,headers:{Origin:origin,'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{})},...(data?{body:JSON.stringify(data)}:{})}),env);
@@ -17,9 +17,12 @@ test('availability requests validate, persist, retry safely and are private to a
  assert.equal((await call('/api/disponibilidade','GET')).status,405);
  assert.equal((await call('/api/disponibilidade','POST',payload,null,'https://evil.test')).status,403);
  for(const fields of [{name:''},{phone:'123'},{city:''},{request_key:'bad'}])assert.equal((await call('/api/disponibilidade','POST',{...payload,...fields})).status,400);
+ assert.equal(sqlite.prepare('SELECT COUNT(*) total FROM homepage_metrics').get().total,0);
  const saved=await call('/api/disponibilidade','POST',payload);assert.equal(saved.status,201);
  assert.deepEqual(await saved.json(),{ok:true,status:'aguardando_contato'});
+ assert.equal(sqlite.prepare("SELECT count FROM homepage_metrics WHERE day='2026-11-27' AND kind='whatsapp'").get().count,1);
  assert.equal((await call('/api/disponibilidade','POST',payload)).status,201);
+ assert.equal(sqlite.prepare("SELECT count FROM homepage_metrics WHERE kind='whatsapp'").get().count,1);
  assert.equal(sqlite.prepare('SELECT COUNT(*) total FROM availability_leads').get().total,1);
  assert.equal((await call('/api/disponibilidade','POST',{...payload,city:'Outra'})).status,409);
  assert.equal((await call('/api/campanhas/return-leads')).status,401);
@@ -50,7 +53,7 @@ test('availability requests validate, persist, retry safely and are private to a
 
 test('availability rate limit and return pagination',async t=>{
  t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,10,27,15)});
- const sqlite=new DatabaseSync(':memory:');t.after(()=>sqlite.close());for(const file of ['0001_campanhas','0011_availability_leads'])sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
+ const sqlite=new DatabaseSync(':memory:');t.after(()=>sqlite.close());for(const file of ['0001_campanhas','0002_homepage_metrics','0011_availability_leads'])sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
  const env={DB:adapter(sqlite)};
  for(let i=0;i<6;i++){
   const response=await worker.fetch(new Request('https://curio.test/api/disponibilidade',{method:'POST',headers:{Origin:'https://curio.test','Content-Type':'application/json'},body:JSON.stringify({request_key:crypto.randomUUID(),name:'Teste',phone:'91999991234',city:'Belém'})}),env);
