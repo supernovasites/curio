@@ -612,7 +612,7 @@ async function manageReturn(req,db,path,user,audit){
     if(lead.stage!=='principal'&&lead.stage!=='pendentes')fail(409,'Este contato já foi classificado.');
     await db.prepare("UPDATE availability_leads SET status='contatado',stage='pendentes',contacted_at=CURRENT_TIMESTAMP,contacted_by=? WHERE id=?").bind(user.id,id).run();
     await audit(user.id,'abriu_whatsapp_retorno',id);
-    return new Response(null,{status:303,headers:{Location:'https://wa.me/'+lead.phone+'?text='+encodeURIComponent(message.trim().replaceAll('{nome}',lead.name.split(/\s+/)[0])),'Cache-Control':'no-store'}});
+    return new Response(null,{status:303,headers:{Location:'https://wa.me/'+lead.phone+'?text='+encodeURIComponent(message.trim().replace(/\{nome\}/gi,()=>lead.name.trim().split(/\s+/)[0])),'Cache-Control':'no-store'}});
   }
   if(path==='/return-outcome'&&req.method==='POST'){
     const b=await body(req),id=clean(b.id,80);

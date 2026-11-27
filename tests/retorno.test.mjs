@@ -9,7 +9,7 @@ function adapter(sqlite){return {prepare(sql){const stmt=sqlite.prepare(sql);let
 test('availability requests validate, persist, retry safely and are private to authenticated staff',async t=>{
  t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,10,27,15)});
  const sqlite=new DatabaseSync(':memory:');t.after(()=>sqlite.close());
- for(const file of ['0001_campanhas','0002_homepage_metrics','0011_availability_leads'])sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
+ for(const file of ['0001_campanhas','0002_homepage_metrics','0011_availability_leads','0013_return_lead_stages'])sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
  sqlite.prepare('INSERT INTO users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)').run('operator','equipe','Equipe',await hashPassword('test-password'),'operador');
  const env={DB:adapter(sqlite),ASSETS:{fetch:async req=>new Response(new URL(req.url).pathname)}};
  const call=(path,method='GET',data,cookie,origin='https://curio.test')=>worker.fetch(new Request('https://curio.test'+path,{method,headers:{Origin:origin,'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{})},...(data?{body:JSON.stringify(data)}:{})}),env);
@@ -32,16 +32,16 @@ test('availability requests validate, persist, retry safely and are private to a
  const me=await call('/api/campanhas/me','GET',null,cookie),returnCookie=me.headers.getSetCookie().find(value=>value.startsWith('curio_return='));
  assert.match(returnCookie,/Path=\/retorno; HttpOnly; Secure; SameSite=Strict/);
  assert.equal((await call('/retorno/','GET',null,returnCookie.split(';')[0])).status,200);
- const list=await (await call('/api/campanhas/return-leads','GET',null,cookie)).json();assert.equal(list.total,1);assert.equal(list.rows[0].city,'Belém');assert.equal(list.rows[0].status,'novo');assert.ok(!('phone' in list.rows[0]));assert.ok(!('stay_date' in list.rows[0]));
+ const list=await (await call('/api/campanhas/return-leads','GET',null,cookie)).json();assert.equal(list.total,1);assert.equal(list.rows[0].city,'Belém');assert.equal(list.rows[0].status,'novo');assert.equal(list.rows[0].phone,'5591999991234');assert.ok(!('stay_date' in list.rows[0]));
  const id=list.rows[0].id;
  const dispatch=(input,session=cookie,origin='https://curio.test')=>worker.fetch(new Request('https://curio.test/api/campanhas/return-dispatch',{method:'POST',headers:{Origin:origin,'Content-Type':'application/x-www-form-urlencoded',Cookie:session},body:new URLSearchParams(input)}),env);
  assert.equal((await dispatch({id,message:'Olá'},'',undefined)).status,401);
  assert.equal((await dispatch({id,message:'Olá'},cookie,'https://evil.test')).status,403);
  assert.equal((await dispatch({id,message:''})).status,400);
- const opened=await dispatch({id,message:'Olá, {nome}! Vamos consultar?'});assert.equal(opened.status,303);
+ const opened=await dispatch({id,message:'Olá, {Nome}! Vamos consultar?'});assert.equal(opened.status,303);
  const whatsapp=new URL(opened.headers.get('Location'));assert.equal(whatsapp.pathname,'/5591999991234');assert.equal(whatsapp.searchParams.get('text'),'Olá, Maria! Vamos consultar?');
  assert.equal((await (await call('/api/campanhas/return-leads','GET',null,cookie)).json()).total,0);
- assert.equal((await (await call('/api/campanhas/return-leads?status=contatado','GET',null,cookie)).json()).total,1);
+ assert.equal((await (await call('/api/campanhas/return-leads?status=pendentes','GET',null,cookie)).json()).total,1);
  assert.equal((await call('/api/campanhas/return-leads?status=invalid','GET',null,cookie)).status,400);
  const created=await call('/api/campanhas/campaigns','POST',{name:'Disponibilidade',message:'Olá, {nome}!'},cookie);assert.equal(created.status,201);const template=(await created.json()).id;
  assert.equal((await call('/api/campanhas/campaigns/'+template,'PATCH',{name:'Retorno',message:'Olá, {nome}! Qual a melhor data?'},cookie)).status,200);
@@ -53,7 +53,7 @@ test('availability requests validate, persist, retry safely and are private to a
 
 test('availability rate limit and return pagination',async t=>{
  t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,10,27,15)});
- const sqlite=new DatabaseSync(':memory:');t.after(()=>sqlite.close());for(const file of ['0001_campanhas','0002_homepage_metrics','0011_availability_leads'])sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
+ const sqlite=new DatabaseSync(':memory:');t.after(()=>sqlite.close());for(const file of ['0001_campanhas','0002_homepage_metrics','0011_availability_leads','0013_return_lead_stages'])sqlite.exec(await readFile('migrations/'+file+'.sql','utf8'));
  const env={DB:adapter(sqlite)};
  for(let i=0;i<6;i++){
   const response=await worker.fetch(new Request('https://curio.test/api/disponibilidade',{method:'POST',headers:{Origin:'https://curio.test','Content-Type':'application/json'},body:JSON.stringify({request_key:crypto.randomUUID(),name:'Teste',phone:'91999991234',city:'Belém'})}),env);
